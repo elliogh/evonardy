@@ -2,14 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, color, command, stepLabel } from "./api";
 import type { Bot, GameSummary, Player, Snapshot, Step } from "./api";
 import { Board } from "./Board";
+import { Jobs } from "./Training";
+import type { Job } from "./jobs";
 const route = () =>
-  typeof window === "undefined"
-    ? ""
-    : (window.location.hash.match(/^#\/games\/([A-Za-z0-9_-]+)$/)?.[1] ?? "");
+  typeof window === "undefined" ? "" : window.location.hash.slice(1);
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong";
 export function App() {
-  const [id, setID] = useState(route);
+  const [path, setID] = useState(route);
+  const gameID = path.match(/^\/games\/([A-Za-z0-9_-]+)$/)?.[1];
+  const training = path.match(/^\/training(?:\/([A-Za-z0-9_-]+))?$/);
+  const evaluation = path.match(
+    /^\/evaluations(?:\/([A-Za-z0-9_-]+))?(?:\?bot=([^&]+))?$/,
+  );
   useEffect(() => {
     const changed = () => setID(route());
     window.addEventListener("hashchange", changed);
@@ -28,7 +33,34 @@ export function App() {
           <i /> Runs locally
         </span>
       </header>
-      {id ? <Game key={id} id={id} /> : <Library />}
+      <nav className="site-nav" aria-label="Main navigation">
+        <a
+          href="#"
+          aria-current={!training && !evaluation ? "page" : undefined}
+        >
+          My bots
+        </a>
+        <a href="#/training" aria-current={training ? "page" : undefined}>
+          Training
+        </a>
+        <a href="#/evaluations" aria-current={evaluation ? "page" : undefined}>
+          Evaluate
+        </a>
+      </nav>
+      {gameID ? (
+        <Game key={gameID} id={gameID} />
+      ) : training ? (
+        <Jobs key={path} kind="training" id={training[1]} />
+      ) : evaluation ? (
+        <Jobs
+          key={path}
+          kind="evaluation"
+          id={evaluation[1]}
+          initialBot={evaluation[2]}
+        />
+      ) : (
+        <Library />
+      )}
       <footer>
         Long nardy · No doubling cube
         <br />
@@ -40,6 +72,7 @@ export function App() {
 function Library() {
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [games, setGames] = useState<GameSummary[]>([]);
+  const [evaluations, setEvaluations] = useState<Job[]>([]);
   const [human, setHuman] = useState<Player>(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,12 +81,18 @@ function Library() {
   const [name, setName] = useState("");
   const [notice, setNotice] = useState("");
   const refresh = useCallback(async () => {
-    const [b, g] = await Promise.all([
+    const [b, g, evaluations] = await Promise.all([
       api<Bot[]>("/bots"),
       api<GameSummary[]>("/games"),
+      api<Job[]>("/evaluations"),
     ]);
     setBots(b);
     setGames(g);
+    setEvaluations(
+      evaluations
+        .filter((x) => x.state === "completed" && x.evaluation?.stats)
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    );
   }, []);
   useEffect(() => {
     refresh().catch((e) => setError(message(e)));
@@ -79,7 +118,8 @@ function Library() {
           <br />A bot of your own.
         </h1>
         <p className="intro">
-          Play a baseline, keep a snapshot, and pick up where you left off.
+          Play a baseline, evolve your own strategy, and keep a bot worth
+          testing.
         </p>
       </section>
       {error && (
@@ -140,7 +180,9 @@ function Library() {
               <p>
                 {bot.kind === "random"
                   ? "A fresh choice from every legal position."
-                  : "A steady eye for distance, home, and blocks."}
+                  : bot.builtin
+                    ? "A steady eye for distance, home, and blocks."
+                    : "A frozen linear strategy, ready to play."}
               </p>
               <dl>
                 <div>
@@ -149,11 +191,29 @@ function Library() {
                 </div>
                 <div>
                   <dt>Evaluation</dt>
-                  <dd>Not evaluated</dd>
+                  <dd>
+                    {(() => {
+                      const e = evaluations.find(
+                        (x) => x.evaluation?.bot_id === bot.id,
+                      );
+                      const s = e?.evaluation?.stats;
+                      return s ? (
+                        <a href={`#/evaluations/${e!.id}`}>
+                          {((s.wins / s.games) * 100).toFixed(1)}% wins ·{" "}
+                          {s.games} games →
+                        </a>
+                      ) : (
+                        "Not evaluated"
+                      );
+                    })()}
+                  </dd>
                 </div>
               </dl>
               {!bot.available && <p className="alert">{bot.reason}</p>}
               <div className="card-actions">
+                <a className="button" href={`#/evaluations?bot=${bot.id}`}>
+                  Evaluate {bot.name}
+                </a>
                 <button
                   className="primary"
                   disabled={busy || !bot.available}
@@ -288,11 +348,14 @@ function Library() {
         )}
       </section>
       <aside className="roadmap">
-        <span className="tag">UP NEXT</span>
+        <span className="tag">GA-LINEAR</span>
         <p>
-          Training arrives in the next milestone. Today, these snapshots keep
-          the baseline’s actual parameters.
+          Train through real games, save an evaluated candidate, then test it on
+          fresh dice seeds.
         </p>
+        <a className="button" href="#/training">
+          Start training
+        </a>
       </aside>
     </>
   );

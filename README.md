@@ -1,10 +1,9 @@
 # EvoNardy
 
 A local open-source **long nardy (long backgammon)** project with a Go backend
-and a React/TypeScript UI. M0–M2 implements the game engine, Random/Heuristic
-agents, CLI simulations, verifiable replays, browser play, and a persistent bot
-library. Training and evaluation are planned for M3+; snapshots currently save
-actual baseline parameters and are explicitly marked as not evaluated.
+and a React/TypeScript UI. M0–M3 implements the game engine, Random/Heuristic
+agents, verifiable replays, browser play, a persistent bot library, and real
+GA-linear training with checkpoint/resume and independent evaluation.
 
 The UI and all repository content are maintained in English.
 
@@ -12,7 +11,7 @@ The UI and all repository content are maintained in English.
 
 The backend requires Go 1.25+. Use Node 22.12+ LTS or Node 24+ and npm for the frontend.
 Development and storage verification currently support macOS and Linux. Writing
-on platforms without flock is explicitly rejected. Python, external APIs, and
+on platforms without flock is explicitly rejected. External APIs and
 a database are not required.
 
 ```bash
@@ -51,6 +50,23 @@ bin/evonardy bots save --source builtin/heuristic-v1 --name "My baseline" --data
 bin/evonardy bots list --data-dir ./data
 ```
 
+Open **Training** to evolve linear weights through completed games. Use the smoke
+preset for a short run, choose an evaluated candidate, and save it to My bots.
+**Evaluate** runs separate paired games against frozen opponents; the library
+shows the latest completed result. Stop saves a checkpoint and Resume continues
+it after restart. You can play a saved bot while another run trains.
+
+The shared offline lifecycle is also available (stop the server first):
+
+```bash
+bin/evonardy train --config configs/ga-linear-smoke.json --data-dir ./data --save-name "My GA bot"
+bin/evonardy resume --run <run-id> --data-dir ./data
+bin/evonardy evaluate --bot <saved-bot-id> --config configs/evaluation-smoke.json --data-dir ./data
+```
+
+SIGINT/SIGTERM checkpoints an active job after its current bounded batch. See
+[docs/TRAINING.md](docs/TRAINING.md) for fitness, counters, limits, and reproducibility.
+
 Run bounded baseline simulations independently:
 
 ```bash
@@ -62,7 +78,8 @@ Game and worker counts are bounded by the configuration. Flags `--seed`, `--game
 `--workers`, `--max-turns`, `--white`, and `--black` override JSON values. Without
 JSON, defaults are 4 games, seed 42, 2 workers, 1200 turns, and Heuristic against
 Random. Offline simulations currently accept only `random` and `heuristic`. Invalid parameters
-are rejected before simulation. Ctrl+C cancels the batch; resume is planned for M3.
+are rejected before simulation. Ctrl+C cancels the simulation batch. Durable resume is available for training
+and evaluation jobs.
 
 Simulations publish `replays/<run-id>/game-NNNN.json` and
 `runs/<run-id>/summary.json`. Run IDs are unique and existing files are never
@@ -94,7 +111,7 @@ triple-win backgammon result. Formal rules and the bearing-off clarification are
 
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build
-make smoke   # 12 complete baseline games + 2 truncated games; verify all replays
+make smoke   # baselines/replays + 32 GA games, frozen save, 8 evaluation games
 make bench   # move generation, evaluation, simulation; measured time and allocations
 cd web && npx playwright install chromium
 cd .. && make e2e  # real local server; temporary data; full browser game and restart
@@ -113,10 +130,14 @@ corruption, reproducibility across worker counts, locking, immutable publication
 model save/load, concurrent command retries, session recovery, and HTTP/SSE.
 Browser checks exercise the library, keyboard moves, a full game against Heuristic,
 refresh, server restart, draft undo, replay download, and a 390px viewport.
+M3 checks additionally train real coefficients, save/reload a candidate, run an
+independent evaluation, stop/resume after restart, and finish a game against the
+frozen bot while another run trains.
 
 Status and actual results: [docs/PROGRESS.md](docs/PROGRESS.md).
 API and persistence contracts: [docs/API.md](docs/API.md).
-Next milestone: M3, with GA-linear training, checkpoint/resume, and evaluation.
+Training and reproducibility: [docs/TRAINING.md](docs/TRAINING.md).
+Next milestone: M4, neural evaluator and RL.
 The full implementation brief is in `evonardy-codex-plan/EVONARDY_PLAN.md`.
 
 ## License

@@ -1,0 +1,7 @@
+{
+  "seed": 2026,
+  "pairs": 2,
+  "workers": 2,
+  "max_turns": 1200,
+  "opponent_ids": ["builtin/heuristic-v1", "builtin/random-v1"]
+}

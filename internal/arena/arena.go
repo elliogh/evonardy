@@ -4,8 +4,6 @@ package arena
 import (
 	"context"
 	"evonardy/internal/agent"
-	"evonardy/internal/game"
-	"evonardy/internal/random"
 	"evonardy/internal/replay"
 	"fmt"
 	"sync"
@@ -79,76 +77,16 @@ func Run(ctx context.Context, cfg Config) ([]replay.Record, error) {
 }
 
 func simulate(ctx context.Context, cfg Config, id uint64) (replay.Record, error) {
-	label := fmt.Sprintf("game/%d", id)
-	opening := []game.Dice{}
-	starter := game.White
-	for attempt := uint64(0); ; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return replay.Record{}, err
-		}
-		if attempt >= replay.MaxEvents {
-			return replay.Record{}, fmt.Errorf("opening retry limit reached")
-		}
-		source := random.New(cfg.Seed, label+"/opening", attempt)
-		dice := game.Dice{source.IntN(6) + 1, source.IntN(6) + 1}
-		opening = append(opening, dice)
-		if dice[0] != dice[1] {
-			if dice[1] > dice[0] {
-				starter = game.Black
-			}
-			break
-		}
-	}
-	p := game.Initial(starter)
 	names := [2]string{cfg.White, cfg.Black}
-	var bots [2]agent.Agent
-	for player := game.White; player <= game.Black; player++ {
-		if names[player] == "heuristic" {
-			bots[player] = agent.Heuristic{}
-		} else {
-			bots[player] = agent.NewRandom(random.New(cfg.Seed, fmt.Sprintf("%s/agent/%d", label, player), 0))
-		}
+	var policies [2]Factory
+	for side, name := range names {
+		policies[side] = Factory{ID: "builtin/" + name + "-v1", New: func(r agent.IntSource) agent.Agent {
+			if name == "heuristic" {
+				return agent.Heuristic{}
+			}
+			return agent.NewRandom(r)
+		}}
 	}
-	botIDs := [2]string{"builtin/" + names[0] + "-v1", "builtin/" + names[1] + "-v1"}
-	r := replay.New(p, opening, botIDs, cfg.Seed, id, cfg.MaxTurns)
-	var sideTurns [2]uint64
-	for turnNumber := 0; turnNumber < cfg.MaxTurns; turnNumber++ {
-		if err := ctx.Err(); err != nil {
-			return r, err
-		}
-		player := p.Turn
-		dice := opening[len(opening)-1]
-		if turnNumber > 0 {
-			source := random.New(cfg.Seed, fmt.Sprintf("%s/dice/%d", label, player), sideTurns[player])
-			dice = game.Dice{source.IntN(6) + 1, source.IntN(6) + 1}
-		}
-		sideTurns[player]++
-		actions, err := game.LegalActions(p, dice)
-		if err != nil {
-			return r, fmt.Errorf("game %d legality: %w", id, err)
-		}
-		choice, err := bots[player].Choose(ctx, p, dice, actions)
-		if err != nil {
-			return r, err
-		}
-		if choice < 0 || choice >= len(actions) {
-			return r, fmt.Errorf("agent returned invalid action index")
-		}
-		action := actions[choice]
-		next, err := game.ApplyTurn(p, dice, action.Turn)
-		if err != nil {
-			return r, fmt.Errorf("game %d illegal agent action: %w", id, err)
-		}
-		if next != action.Next {
-			return r, fmt.Errorf("successor/application mismatch")
-		}
-		r.Append(dice, action.Turn, next)
-		p = next
-		if _, terminal := game.Result(p); terminal {
-			r.Finish(p, replay.Completed)
-			return r, nil
-		}
-	}
-	r.Finish(p, replay.Truncated)
-	return r, nil
+	result, err := Play(ctx, MatchConfig{Seed: cfg.Seed, ID: id, StreamID: id, MaxTurns: cfg.MaxTurns}, policies)
+	return result.Record, err
 }

@@ -1,6 +1,6 @@
 # Architecture
 
-The current implemented iteration is M0–M2. Later modules are added together with
+The current implemented iteration is M0–M3. Later modules are added together with
 behavior rather than as empty scaffolds. Go 1.25 with the standard library;
 React 19 + TypeScript 5 + Vite 7, with Vitest 4. Exact frontend versions are
 locked in `web/package-lock.json`. Go has no external dependencies, so a
@@ -28,9 +28,15 @@ go.sum file is not needed yet. All repository content and UI copy use English.
   command receipts, version conflicts, and replay archival. No training dependency.
 - `httpapi`: bounded HTTP commands/snapshots and SSE notifications; explicit
   Host/Origin allowlists and strict JSON bodies. See [API.md](API.md).
-- `cmd/evonardy`: serve, bots list/save, simulate, and replay. Training is unavailable.
+- `training`: pure GA-linear generation state, paired schedules, full-generation
+  fitness, elitism/tournament selection, crossover, mutation, and measured work.
+- `jobs`: bounded durable queue, atomic checkpoints, immutable generation archives,
+  interruption recovery, versioned controls, frozen publication, and evaluation.
+- `cmd/evonardy`: serve, train, resume, evaluate, bots list/save, simulate, and replay.
+  The server and offline commands use the same job lifecycle.
 - `web`: a bot library, SVG board driven by legal continuations, turn history,
-  and resume through the URL. The Go server serves a separate Vite production build.
+  resume through the URL, training, candidate saves, and independent evaluations.
+  The Go server serves a separate Vite production build.
 
 ## Determinism and data
 
@@ -49,7 +55,6 @@ replays are immutable.
 
 ## Later milestones
 
-M3 adds a shared CLI/server training lifecycle, GA-linear, checkpoint/resume,
-and evaluation. Any truncated fitness game stops the generation's evaluation;
-selection from an incomplete evaluation set is prohibited by the user's decision.
-MLP/RL/Hybrid follow a completed M3.
+M4 adds the encoder, MLP, and RL. GA-MLP and Hybrid follow in M5; comparisons
+and release work remain M6–M7. The completed GA-linear lifecycle and random
+contracts are documented in [TRAINING.md](TRAINING.md).

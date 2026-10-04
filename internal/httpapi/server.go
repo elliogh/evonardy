@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"evonardy/internal/app"
+	"evonardy/internal/jobs"
 	"evonardy/internal/library"
 )
 
@@ -23,6 +24,7 @@ type Config struct {
 	AllowedHosts   []string
 	AllowedOrigins []string
 	WebFS          fs.FS
+	Jobs           *jobs.Manager
 }
 type update struct {
 	GameID  string `json:"game_id"`
@@ -78,6 +80,9 @@ type server struct {
 func New(games *app.Service, bots *library.Library, config Config) http.Handler {
 	s := &server{games: games, bots: bots, config: config, hub: hub{channels: map[string]map[chan update]bool{}}, requests: make(chan struct{}, 32), streams: make(chan struct{}, 64)}
 	mux := http.NewServeMux()
+	if config.Jobs != nil {
+		s.jobRoutes(mux)
+	}
 	mux.HandleFunc("GET /api/bots", func(w http.ResponseWriter, r *http.Request) { cards, err := bots.List(); respond(w, cards, err) })
 	mux.HandleFunc("GET /api/bots/{id...}", func(w http.ResponseWriter, r *http.Request) {
 		card, err := bots.Get(r.PathValue("id"))
@@ -236,7 +241,7 @@ func fail(w http.ResponseWriter, status int, code, message string) {
 func respond(w http.ResponseWriter, value any, err error) {
 	if err != nil {
 		switch {
-		case errors.Is(err, app.ErrNotFound), errors.Is(err, library.ErrNotFound):
+		case errors.Is(err, app.ErrNotFound), errors.Is(err, library.ErrNotFound), errors.Is(err, jobs.ErrNotFound):
 			fail(w, 404, "not_found", err.Error())
 		case errors.Is(err, app.ErrConflict), errors.Is(err, library.ErrConflict):
 			fail(w, 409, "conflict", err.Error())

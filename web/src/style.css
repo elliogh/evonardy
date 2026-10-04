@@ -223,6 +223,8 @@ dt {
 dd {
   margin: 0;
   text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .card-actions {
   display: flex;
@@ -232,6 +234,167 @@ dd {
 .card-actions button {
   flex-grow: 1;
   font-size: 12px;
+}
+.card-actions .button {
+  flex-grow: 1;
+  font-size: 12px;
+}
+.site-nav {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  font-size: 13px;
+}
+.site-nav a {
+  color: #a9bba7;
+  padding: 6px 0;
+  border-bottom: 2px solid transparent;
+}
+.site-nav a[aria-current] {
+  color: #e5c790;
+  border-color: #d8b77a;
+}
+.lab-hero {
+  margin: 42px 0;
+}
+.lab-panel {
+  padding: 26px;
+  border: 1px solid #71857450;
+  border-radius: 14px;
+  background: #263e2d44;
+  overflow-wrap: anywhere;
+}
+.lab-panel h2 {
+  font-size: 23px;
+}
+.form-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  padding: 0;
+  margin: 24px 0;
+  border: 0;
+  min-width: 0;
+}
+.form-fields label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: #bacaaf;
+}
+.form-fields input,
+.form-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.form-fields .wide {
+  grid-column: 1 / -1;
+}
+summary {
+  cursor: pointer;
+  color: #cfbf99;
+  font-size: 13px;
+}
+.opponents {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  border: 1px solid #71857450;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.opponents label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.opponents input {
+  min-height: 0;
+  accent-color: #d8b77a;
+}
+.run-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.run-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 18px;
+  margin: 28px 0;
+}
+.run-stats div {
+  display: grid;
+  gap: 7px;
+}
+.run-stats small {
+  font-size: 11px;
+  color: #a2b39c;
+}
+.run-stats strong {
+  font-size: 28px;
+  font-weight: 600;
+}
+.run-stats span {
+  font-size: 11px;
+  color: #a9b69b;
+}
+progress {
+  width: 100%;
+  height: 7px;
+  accent-color: #d8b77a;
+}
+.fitness-chart {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+}
+.fitness-chart text {
+  fill: #adbcaa;
+  font-size: 12px;
+}
+.chart-grid {
+  stroke: #71857450;
+  stroke-dasharray: 3 4;
+}
+.chart-best,
+.chart-mean {
+  fill: none;
+  stroke: #d8b77a;
+  stroke-width: 2.5;
+}
+.chart-mean {
+  stroke: #88ad86;
+}
+.chart-dot {
+  fill: #d8b77a;
+}
+.gold {
+  color: #d8b77a;
+}
+.weights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+  font-size: 11px;
+  color: #a9b69b;
+}
+.weights span {
+  display: grid;
+  gap: 4px;
+}
+.weights strong {
+  color: #e6d8b6;
+  font-size: 15px;
+}
+pre {
+  font-size: 12px;
+  overflow-x: auto;
+  max-width: 100%;
 }
 .card-actions .primary {
   width: 100%;
@@ -565,6 +728,31 @@ footer span {
   }
 }
 @media (max-width: 600px) {
+  .fitness-chart text {
+    font-size: 24px;
+  }
+  .lab-panel .section-heading {
+    flex-wrap: wrap;
+  }
+  .lab-panel {
+    padding: 18px;
+  }
+  .form-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .run-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .run-toolbar {
+    flex-wrap: wrap;
+  }
+  .roadmap {
+    flex-wrap: wrap;
+  }
+  .site-nav {
+    gap: 22px;
+  }
   main {
     padding: 22px 18px;
   }
