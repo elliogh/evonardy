@@ -1,6 +1,6 @@
 # Architecture
 
-The current implemented iteration is M0–M1. M2+ modules are added together with
+The current implemented iteration is M0–M2. Later modules are added together with
 behavior rather than as empty scaffolds. Go 1.25 with the standard library;
 React 19 + TypeScript 5 + Vite 7, with Vitest 4. Exact frontend versions are
 locked in `web/package-lock.json`. Go has no external dependencies, so a
@@ -20,9 +20,17 @@ go.sum file is not needed yet. All repository content and UI copy use English.
   separate completed/truncated outcomes, and scheduling-independent results.
 - `replay`: version, actual opening/dice/actions, hashes, and outcome;
   playback verifies actions and hashes without inference or a trainer.
-- `storage`: data-directory locking and atomic replay publication; one writer.
-- `cmd/evonardy`: simulate/replay CLI. Training and human-play commands are unavailable.
-- `web`: React scaffold that explicitly describes unavailable human play and training.
+- `storage`: data-directory locking, immutable file/bundle publication, and atomic
+  replacement of mutable sessions/metadata; one process owns the root.
+- `library`: immutable inference packages, content identities, compatibility and
+  checksum validation, built-in cards, and separate versioned display metadata.
+- `app`: durable human sessions, private dice streams, bot turns, draft previews,
+  command receipts, version conflicts, and replay archival. No training dependency.
+- `httpapi`: bounded HTTP commands/snapshots and SSE notifications; explicit
+  Host/Origin allowlists and strict JSON bodies. See [API.md](API.md).
+- `cmd/evonardy`: serve, bots list/save, simulate, and replay. Training is unavailable.
+- `web`: a bot library, SVG board driven by legal continuations, turn history,
+  and resume through the URL. The Go server serves a separate Vite production build.
 
 ## Determinism and data
 
@@ -41,9 +49,7 @@ replays are immutable.
 
 ## Later milestones
 
-M2 adds app/httpapi/library and server sessions. Dice and drafts belong to the
-session; rules stay in game. Mutating commands use command_id + expected_version.
-M3 adds a shared CLI/server training lifecycle, immutable inference packages,
-and GA-linear. Any truncated fitness game stops the generation's evaluation;
+M3 adds a shared CLI/server training lifecycle, GA-linear, checkpoint/resume,
+and evaluation. Any truncated fitness game stops the generation's evaluation;
 selection from an incomplete evaluation set is prohibited by the user's decision.
 MLP/RL/Hybrid follow a completed M3.

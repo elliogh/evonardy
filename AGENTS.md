@@ -1,7 +1,7 @@
 # EvoNardy
 
 Read `docs/PROGRESS.md` before choosing the next milestone. The original brief is
-`evonardy-codex-plan/EVONARDY_PLAN.md`; the current iteration is M0–M1.
+`evonardy-codex-plan/EVONARDY_PLAN.md`.
 
 For game behavior, use `docs/RULES.md` and the public engine tests. Changes to game
 behavior require a new ruleset version and compatibility checks. Go owns legality;

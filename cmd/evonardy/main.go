@@ -18,11 +18,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "evonardy:", err)
@@ -32,10 +33,14 @@ func main() {
 
 func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, err := fmt.Fprintln(out, "EvoNardy M0–M1\n  simulate [--config file] [--seed N] [--games N] [--workers N] [--max-turns N] [--white random|heuristic] [--black random|heuristic] [--data-dir ./data]\n  replay --file path.json | --dir replay-directory\nFrontend: make dev. Human play and training are not implemented yet.")
+		_, err := fmt.Fprintln(out, "EvoNardy M2\n  serve [--addr 127.0.0.1:8080] [--data-dir ./data] [--web-dir web/dist]\n  bots list|save [--source bot-id] [--name name] [--data-dir ./data]\n  simulate [--config file] [--seed N] [--games N] [--workers N] [--max-turns N] [--white random|heuristic] [--black random|heuristic] [--data-dir ./data]\n  replay --file path.json | --dir replay-directory\nDevelopment: make dev. Training is not implemented yet.")
 		return err
 	}
 	switch args[0] {
+	case "serve":
+		return serveCommand(ctx, args[1:], out)
+	case "bots":
+		return botsCommand(ctx, args[1:], out)
 	case "simulate":
 		return simulateCommand(ctx, args[1:], out)
 	case "replay":
