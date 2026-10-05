@@ -1,5 +1,7 @@
 # EvoNardy
 
+[![CI](https://github.com/elliogh/evonardy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/elliogh/evonardy/actions/workflows/ci.yml)
+
 A local open-source **long nardy (long backgammon)** project with a Go backend
 and a React/TypeScript UI. M0–M3 implements the game engine, Random/Heuristic
 agents, verifiable replays, browser play, a persistent bot library, and real
@@ -107,6 +109,12 @@ Replays store actual dice and full actions, including the opening roll.
 Verification does not require bots or repeat historical move selection.
 
 ## Rules and checks
+
+GitHub Actions runs the full validation suite on every pull request to `main`,
+every push to `main`, and manual dispatches using Ubuntu 24.04, Go 1.25, and
+Node.js 24. `main` requires an up-to-date PR and a successful **CI result**.
+Logs, informational benchmarks, and Chromium reports are retained for seven days.
+See [the CI workflow](docs/WORKFLOW.md#required-ci) for failure investigation.
 
 The `long-nardy-fnr2026-nocube-v1` profile has no hitting, doubling cube, or
 triple-win backgammon result. Formal rules and the bearing-off clarification are in

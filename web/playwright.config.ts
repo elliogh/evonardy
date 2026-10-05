@@ -8,6 +8,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:18180",
     viewport: { width: 1280, height: 900 },
     trace: "retain-on-failure",
+    screenshot: process.env.CI ? "only-on-failure" : "off",
   },
-  reporter: "list",
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
 });

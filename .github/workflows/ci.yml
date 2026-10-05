@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GOCACHE: ${{ github.workspace }}/.cache/go-build
+  npm_config_cache: ${{ github.workspace }}/.cache/npm
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25.x"
+          check-latest: true
+          cache-dependency-path: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Record environment
+        run: |
+          mkdir -p .cache/ci-logs
+          { go version; node --version; npm --version; uname -a; lscpu; } | tee .cache/ci-logs/environment.log
+      - name: Install dependencies
+        run: make setup 2>&1 | tee .cache/ci-logs/setup.log
+      - name: Validate formatting, vet, tests, race checks, and frontend
+        run: make test 2>&1 | tee .cache/ci-logs/test.log
+      - name: Validate simulations, replays, training, and evaluation
+        run: make smoke 2>&1 | tee .cache/ci-logs/smoke.log
+      - name: Build production assets and server
+        run: make build 2>&1 | tee .cache/ci-logs/build.log
+      - name: Record informational benchmarks
+        run: make bench 2>&1 | tee .cache/ci-logs/bench.log
+      - name: Upload validation logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: checks-logs
+          path: .cache/ci-logs/*.log
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn
+
+  e2e:
+    name: Chromium E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25.x"
+          check-latest: true
+          cache-dependency-path: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Record environment
+        run: |
+          mkdir -p .cache/ci-logs
+          { go version; node --version; npm --version; uname -a; lscpu; } | tee .cache/ci-logs/environment.log
+      - name: Install dependencies
+        run: make setup 2>&1 | tee .cache/ci-logs/setup.log
+      - name: Install Chromium and system dependencies
+        working-directory: web
+        run: npx playwright install --with-deps chromium 2>&1 | tee ../.cache/ci-logs/browser-install.log
+      - name: Run browser scenarios against the production server
+        run: make e2e 2>&1 | tee .cache/ci-logs/e2e.log
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: chromium-diagnostics
+          path: |
+            .cache/ci-logs/*.log
+            web/playwright-report/
+            web/test-results/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn
+
+  result:
+    name: CI result
+    needs: [checks, e2e]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Require both validation jobs to succeed
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          printf 'Checks: %s\nChromium E2E: %s\n' "$CHECKS_RESULT" "$E2E_RESULT"
+          [[ "$CHECKS_RESULT" == success && "$E2E_RESULT" == success ]]
