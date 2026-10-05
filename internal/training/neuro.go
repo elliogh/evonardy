@@ -20,23 +20,27 @@ const GAMLPAlgorithm = "ga-mlp-v1"
 const NeuroRandomContract = "keyed-pcg-neuro-v1"
 
 type NeuroCandidate struct {
-	ID         string                 `json:"id"`
-	Parameters agent.NeuralParameters `json:"parameters"`
-	Parents    []string               `json:"parents"`
-	Reason     string                 `json:"reason"`
-	Stats      *Stats                 `json:"stats"`
+	Hyperparameters TDHyperparameters      `json:"hyperparameters,omitzero"`
+	ID              string                 `json:"id"`
+	Parameters      agent.NeuralParameters `json:"parameters"`
+	Parents         []string               `json:"parents"`
+	Reason          string                 `json:"reason"`
+	Stats           *Stats                 `json:"stats"`
 }
 type NeuroGeneration struct {
-	Algorithm      string           `json:"algorithm"`
-	Ruleset        string           `json:"ruleset"`
-	EncoderVersion string           `json:"encoder_version"`
-	NetworkVersion string           `json:"network_version"`
-	Number         int              `json:"number"`
-	Ranked         []NeuroCandidate `json:"ranked"`
-	Scores         []Score          `json:"scores"`
-	Metric         Metric           `json:"metric"`
+	TrainingCounters Counters         `json:"training_counters,omitzero"`
+	Replacements     []Replacement    `json:"replacements,omitempty"`
+	Algorithm        string           `json:"algorithm"`
+	Ruleset          string           `json:"ruleset"`
+	EncoderVersion   string           `json:"encoder_version"`
+	NetworkVersion   string           `json:"network_version"`
+	Number           int              `json:"number"`
+	Ranked           []NeuroCandidate `json:"ranked"`
+	Scores           []Score          `json:"scores"`
+	Metric           Metric           `json:"metric"`
 }
 type NeuroState struct {
+	Hybrid         *HybridProgress  `json:"hybrid,omitempty"`
 	Version        int              `json:"version"`
 	Algorithm      string           `json:"algorithm"`
 	RandomContract string           `json:"random_contract"`
@@ -81,6 +85,9 @@ func (s NeuroState) schedule() State {
 }
 func NeuroSlots(s NeuroState) int { return Slots(s.schedule()) }
 func PlayNeuroWave(ctx context.Context, s NeuroState) (Wave, error) {
+	if s.Hybrid != nil && !HybridTrainingReady(s) {
+		return Wave{}, fmt.Errorf("Hybrid training incomplete")
+	}
 	tasks := NextTasks(s.schedule())
 	if len(tasks) == 0 {
 		return Wave{}, fmt.Errorf("neural selection budget exhausted")
@@ -118,6 +125,9 @@ func PlayNeuroWave(ctx context.Context, s NeuroState) (Wave, error) {
 	return Wave{Scores: scores, Sample: sample}, nil
 }
 func AddNeuro(s NeuroState, scores []Score) (NeuroState, error) {
+	if s.Hybrid != nil && !HybridTrainingReady(s) {
+		return s, fmt.Errorf("Hybrid training incomplete")
+	}
 	proxy := s.schedule()
 	proxy.Development = s.Development
 	proxy.Counters = s.Counters
@@ -168,6 +178,9 @@ func RankNeuro(s NeuroState) (NeuroGeneration, error) {
 	return NeuroGeneration{Algorithm: s.Algorithm, Ruleset: s.Ruleset, EncoderVersion: s.EncoderVersion, NetworkVersion: s.NetworkVersion, Number: s.Generation + 1, Ranked: ranked, Scores: scores, Metric: m}, nil
 }
 func AdvanceNeuro(s NeuroState) (NeuroState, NeuroGeneration, error) {
+	if s.Algorithm != GAMLPAlgorithm {
+		return s, NeuroGeneration{}, fmt.Errorf("use Hybrid round replacement")
+	}
 	gen, err := RankNeuro(s)
 	if err != nil {
 		return s, gen, err
@@ -212,7 +225,7 @@ func ValidateNeuro(s NeuroState) error {
 	if err := s.Config.Validate(); err != nil {
 		return err
 	}
-	if s.Version != 1 || s.Algorithm != GAMLPAlgorithm || s.RandomContract != NeuroRandomContract || s.Ruleset != game.Ruleset || s.EncoderVersion != encoder.Version || s.NetworkVersion != neural.Version {
+	if s.Version != 1 || (s.Algorithm != GAMLPAlgorithm && s.Algorithm != HybridAlgorithm) || s.RandomContract != NeuroRandomContract || s.Ruleset != game.Ruleset || s.EncoderVersion != encoder.Version || s.NetworkVersion != neural.Version {
 		return fmt.Errorf("incompatible neural population")
 	}
 	proxy := s.schedule()
@@ -229,6 +242,23 @@ func ValidateNeuro(s NeuroState) error {
 			return err
 		}
 		proxy.Population = append(proxy.Population, Candidate{ID: p.ID})
+	}
+	if s.Algorithm == HybridAlgorithm {
+		if err := validateHybrid(s); err != nil {
+			return err
+		}
+		total := hybridTrainingCounters(s)
+		if s.Counters.Games < total.Games || s.Counters.Decisions < total.Decisions || s.Counters.ForwardEvaluations < total.ForwardEvaluations || s.Counters.CompletedGames < total.CompletedGames || s.Counters.TruncatedGames < total.TruncatedGames {
+			return fmt.Errorf("missing Hybrid work")
+		}
+		proxy.Counters.Games -= total.Games
+		proxy.Counters.CompletedGames -= total.CompletedGames
+		proxy.Counters.TruncatedGames -= total.TruncatedGames
+		proxy.Counters.Decisions -= total.Decisions
+		proxy.Counters.ForwardEvaluations -= total.ForwardEvaluations
+		proxy.Counters.Updates = 0
+	} else if s.Hybrid != nil {
+		return fmt.Errorf("Hybrid state in GA-MLP")
 	}
 	if s.Counters.Crossovers != 0 {
 		return fmt.Errorf("GA-MLP does not use crossover")
