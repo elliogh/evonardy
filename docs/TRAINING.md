@@ -116,3 +116,21 @@ My bots links to each model's latest completed independent result. Smoke batches
 verify execution and persistence, not playing strength. Confidence intervals,
 league comparisons, neural evaluators, RL, and Hybrid are later milestones.
 Charts contain saved generation metrics; candidates are promoted only by the user.
+
+## Training games on the board
+
+The Training screen includes automatic playback of actual matches sampled from
+completed worker batches. It shows the candidate, opponent, colors, opening dice,
+full-turn moves, board positions, and terminal result. Pause playback, move to a
+previous/next turn, drag the turn slider, or choose Slow/Normal/Fast speed.
+Follow training moves to the newest available sample after the current replay
+ends; Show latest game switches immediately.
+
+Visual playback is independent of training. Training may finish many games while
+one replay plays, so this is explicitly sampled playback, not a claim to show every
+match in real time. No extra games or inference are performed for observation.
+The latest actual replay is included in each checkpoint and restored after restart.
+Older checkpoints stay compatible; previously completed runs that did not record
+a preview have none. Resumable older runs capture new samples after resuming.
+Positions and legality remain authoritative in Go. A paused or hidden viewer never
+pauses the job, and watchers keep only a bounded current/latest pair of replays.

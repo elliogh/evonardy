@@ -14,6 +14,7 @@ import (
 
 func (s *server) jobRoutes(mux *http.ServeMux) {
 	m := s.config.Jobs
+	mux.HandleFunc("GET /api/training/runs/{id}/watch", func(w http.ResponseWriter, r *http.Request) { x, err := m.Watch(r.PathValue("id")); respond(w, x, err) })
 	mux.HandleFunc("POST /api/training/runs", func(w http.ResponseWriter, r *http.Request) {
 		var req jobs.StartRequest
 		if !decode(w, r, &req) {

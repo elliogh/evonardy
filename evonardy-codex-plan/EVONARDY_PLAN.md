@@ -177,7 +177,7 @@ Session initialization records the opening contest separately. The winner alread
 
 HTTP carries commands and snapshots; SSE carries updates. Start with small events: `game.updated`, `run.progress`, `checkpoint.saved`, `run.completed`, and `run.failed`. On reconnect, requesting the authoritative snapshot is sufficient; do not promise unlimited SSE history. Bound queues so disconnected or slow browsers do not block computation. Aggregate progress, for example twice per second, instead of emitting every training turn.
 
-**Training** screen: available method, seed, budget, worker count, start, and stop with checkpoint. Charts use only saved metrics. A watch action starts a separate game using a frozen copy rather than subscribing the browser to every self-play game.
+**Training** screen: available method, seed, budget, worker count, start, and stop with checkpoint. Charts use only saved metrics. At the user's request, the board plays actual sampled training matches. Playback has its own pause, speed, and turn navigation; it never blocks training or changes its games. Keep observation bounded to the latest sampled replay per run and fetch full histories separately from small progress notifications.
 
 **Comparison** appears after evaluation is implemented, with a matchup matrix and shared-position analysis by several models. Linear-evaluator and neural-value scales are not directly comparable. Do not label neural output as a calibrated win probability.
 
