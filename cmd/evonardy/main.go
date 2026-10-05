@@ -33,7 +33,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, err := fmt.Fprintln(out, "EvoNardy\n  serve [--addr 127.0.0.1:8080] [--data-dir ./data] [--web-dir web/dist]\n  train --config file [--algorithm ga-linear|td0|td-lambda] [--name name] [--data-dir ./data] [--save-name name]\n  resume --run run-id [--data-dir ./data]\n  evaluate --bot bot-id [--config file] [--data-dir ./data]\n  bots list|save [--source bot-id] [--name name] [--data-dir ./data]\n  simulate [--config file] [--seed N] [--games N] [--workers N] [--max-turns N] [--white random|heuristic] [--black random|heuristic] [--data-dir ./data]\n  replay --file path.json | --dir replay-directory\nDevelopment: make dev. SIGINT checkpoints an active training/evaluation job.")
+		_, err := fmt.Fprintln(out, "EvoNardy\n  serve [--addr 127.0.0.1:8080] [--data-dir ./data] [--web-dir web/dist]\n  train --config file [--algorithm ga-linear|ga-mlp|td0|td-lambda|hybrid] [--name name] [--data-dir ./data] [--save-name name]\n  resume --run run-id [--data-dir ./data]\n  evaluate --bot bot-id [--config file] [--data-dir ./data]\n  experiment --config file [--name name] [--data-dir ./data]\n  experiment-resume --experiment id [--data-dir ./data]\n  bots list|save [--source bot-id] [--name name] [--data-dir ./data]\n  simulate [--config file] [--seed N] [--games N] [--workers N] [--max-turns N] [--white random|heuristic] [--black random|heuristic] [--data-dir ./data]\n  replay --file path.json | --dir replay-directory\nDevelopment: make dev. SIGINT checkpoints an active training/evaluation job.")
 		return err
 	}
 	switch args[0] {
@@ -43,6 +43,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return botsCommand(ctx, args[1:], out)
 	case "train", "resume", "evaluate":
 		return jobCommand(ctx, args[0], args[1:], out)
+	case "experiment", "experiment-resume":
+		return experimentCommand(ctx, args[0], args[1:], out)
 	case "simulate":
 		return simulateCommand(ctx, args[1:], out)
 	case "replay":

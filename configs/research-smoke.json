@@ -1,0 +1,86 @@
+{
+  "version": "research-experiment-v1",
+  "training_seeds": [
+    11,
+    12
+  ],
+  "methods": [
+    {
+      "algorithm": "ga-mlp",
+      "ga": {
+        "seed": 42,
+        "population": 4,
+        "generations": 1,
+        "pairs_per_opponent": 1,
+        "workers": 2,
+        "max_turns": 1200,
+        "elite_fraction": 0.25,
+        "tournament_size": 2,
+        "initial_sigma": 1,
+        "mutation_sigma": 0.02
+      }
+    },
+    {
+      "algorithm": "td-lambda",
+      "td": {
+        "seed": 42,
+        "games": 1,
+        "max_turns": 1200,
+        "alpha": 0.001,
+        "epsilon": 0.05,
+        "lambda": 0.7
+      }
+    },
+    {
+      "algorithm": "hybrid",
+      "hybrid": {
+        "seed": 42,
+        "rounds": 1,
+        "games_per_round": 1,
+        "pairs_per_opponent": 1,
+        "workers": 2,
+        "max_turns": 1200,
+        "alpha": 0.001,
+        "epsilon": 0.05,
+        "lambda": 0.7,
+        "alpha_bounds": {
+          "min": 1e-05,
+          "max": 0.1
+        },
+        "epsilon_bounds": {
+          "min": 0,
+          "max": 0.3
+        },
+        "lambda_bounds": {
+          "min": 0,
+          "max": 0.95
+        }
+      }
+    }
+  ],
+  "development_seed": 2026,
+  "final_seed": 2027,
+  "development_pairs": 1,
+  "opponent_ids": [
+    "builtin/heuristic-v1"
+  ],
+  "incumbent_id": "builtin/heuristic-v1",
+  "workers": 2,
+  "max_turns": 1200,
+  "bootstrap": {
+    "seed": 2026,
+    "resamples": 100,
+    "confidence": 0.95
+  },
+  "confirmation": {
+    "version": "single-heldout-incumbent-v1",
+    "pairs": 2,
+    "minimum_pairs": 100,
+    "minimum_margin": 0,
+    "bootstrap": {
+      "seed": 2027,
+      "resamples": 100,
+      "confidence": 0.95
+    }
+  }
+}

@@ -256,3 +256,25 @@ GameID remains the selection schedule's original zero-based index. Sampled train
 replays use their independently derived seed, while selection replays use the fixed
 paired seed schedule. Stop/resume, idempotency, envelope checksums and independent
 evaluation contracts are shared with the existing queue.
+
+## Research experiments
+
+The optional research manager exposes these loopback routes:
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/experiments/config` | Full bounded default with five training seeds |
+| POST | `/api/experiments` | Start with `command_id`, `expected_version: 0`, `name`, full `config` |
+| GET | `/api/experiments` | Compact history; raw per-seed results are in detail/report |
+| GET | `/api/experiments/{id}` | Progress, exact configs, models, counters, paired results and uncertainty |
+| POST | `/api/experiments/{id}/stop` | Stop after the current safe game/wave boundary |
+| POST | `/api/experiments/{id}/resume` | Resume the saved configuration and selection lock |
+| GET | `/api/experiments/{id}/report` | Immutable completed JSON report, verified against its digest |
+
+Control bodies use the existing idempotent `command_id` / `expected_version`
+contract. Unknown fields and invalid phase roots/budgets return 400; stale commands,
+completed-run resume and unavailable reports return 409; missing experiments return
+404. Frontend polling must stop on unmount and terminal states. Published inference
+models are ordinary library models, available for play without the research runner.
+See [research contracts](RESEARCH.md) for statistics, held-out reuse, measured-time
+boundaries, exact seed handling and compatibility limits.
