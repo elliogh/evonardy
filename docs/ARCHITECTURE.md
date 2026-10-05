@@ -1,6 +1,6 @@
 # Architecture
 
-M0–M5 provides the runnable application, shared position encoder, neural network,
+M0–M6 provides the runnable application, shared position encoder, neural network,
 frozen neural inference, sequential TD(0)/TD(lambda) self-play, mutation-only GA-MLP and synchronous Hybrid. Durable neural
 jobs and browser controls use the existing queue/library/evaluation lifecycle. Later modules are added
 with behavior rather than empty scaffolds.
@@ -68,7 +68,19 @@ are checked. Publication uses a temporary file, sync, and atomic creation
 without overwriting. OS locks are released after process crashes. Published
 replays are immutable.
 
+## Research execution
+
+`internal/research` composes existing neural trainers and frozen arena policies
+into a separate bounded durable experiment queue. A single configuration defines
+all training seeds, method budgets, development schedules and held-out confirmation.
+The runner checkpoints complete games/waves, locks selection before final games,
+and publishes checksummed immutable reports. Pair and training-seed bootstrap
+statistics are pure functions of raw results and recorded resampling configuration.
+The CLI and loopback API share the manager; the Research UI polls actual progress
+and renders every seed against measured work. Ordinary jobs can run concurrently;
+use exclusive CLI runs for isolated timing. See [RESEARCH.md](RESEARCH.md).
+
 ## Later milestones
 
-Research comparisons and release work remain M6–M7. The completed GA-linear lifecycle and random
+Release and position-analysis work remain M7. The completed GA-linear lifecycle and random
 contracts are documented in [TRAINING.md](TRAINING.md).

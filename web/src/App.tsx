@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, color, command, stepLabel } from "./api";
 import type { Bot, GameSummary, Player, Snapshot, Step } from "./api";
 import { Board } from "./Board";
+import { Research } from "./Research";
 import { Jobs } from "./Training";
 import type { Job } from "./jobs";
 const route = () =>
@@ -11,6 +12,7 @@ const message = (error: unknown) =>
 export function App() {
   const [path, setID] = useState(route);
   const gameID = path.match(/^\/games\/([A-Za-z0-9_-]+)$/)?.[1];
+  const research = path.match(/^\/research(?:\/([A-Za-z0-9_-]+))?$/);
   const training = path.match(/^\/training(?:\/([A-Za-z0-9_-]+))?$/);
   const evaluation = path.match(
     /^\/evaluations(?:\/([A-Za-z0-9_-]+))?(?:\?bot=([^&]+))?$/,
@@ -36,7 +38,9 @@ export function App() {
       <nav className="site-nav" aria-label="Main navigation">
         <a
           href="#"
-          aria-current={!training && !evaluation ? "page" : undefined}
+          aria-current={
+            !training && !evaluation && !research ? "page" : undefined
+          }
         >
           My bots
         </a>
@@ -46,9 +50,14 @@ export function App() {
         <a href="#/evaluations" aria-current={evaluation ? "page" : undefined}>
           Evaluate
         </a>
+        <a href="#/research" aria-current={research ? "page" : undefined}>
+          Research
+        </a>
       </nav>
       {gameID ? (
         <Game key={gameID} id={gameID} />
+      ) : research ? (
+        <Research key={path} id={research[1]} />
       ) : training ? (
         <Jobs key={path} kind="training" id={training[1]} />
       ) : evaluation ? (

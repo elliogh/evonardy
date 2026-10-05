@@ -69,6 +69,14 @@ func TestResearchHTTPProtocol(t *testing.T) {
 			t.Fatal(route, w.Code, w.Body.String())
 		}
 	}
+	raw, err := m.Report(x.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = call("GET", "/api/experiments/"+x.ID+"/report", nil)
+	if !bytes.Equal(w.Body.Bytes(), raw) {
+		t.Fatal("HTTP download changed immutable report bytes")
+	}
 	if w = call("POST", "/api/experiments/"+x.ID+"/resume", library.Command{CommandID: "final-again", ExpectedVersion: x.Version}); w.Code != 409 {
 		t.Fatal("final confirmation repeated")
 	}
