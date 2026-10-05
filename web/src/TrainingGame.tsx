@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, color, stepLabel } from "./api";
 import type { Outcome, Position, Step } from "./api";
 import { Board } from "./Board";
-import { active, failure } from "./jobs";
+import { active, algorithmName, failure } from "./jobs";
 import type { Job } from "./jobs";
 
 type WatchedGame = NonNullable<Job["watched_game"]> & {
@@ -127,8 +127,8 @@ export function TrainingGame({ job }: { job: Job }) {
         <span className="tag">SAMPLED PLAYBACK</span>
       </div>
       <p className="muted">
-        Games train at full speed. Watch sampled completed games at your own
-        pace; playback does not pause learning.
+        Games train at full speed. Watch sampled games at your own pace;
+        playback does not pause learning.
       </p>
       {error && (
         <p className="alert" role="alert">
@@ -139,7 +139,7 @@ export function TrainingGame({ job }: { job: Job }) {
       {!job.watched_game ? (
         <p className="empty-state">
           {active(job)
-            ? "The first completed batch will appear here."
+            ? `The first ${job.td_config ? "saved game" : "completed batch"} will appear here.`
             : "No game was recorded for this run."}
         </p>
       ) : !view || !position ? (
@@ -153,12 +153,25 @@ export function TrainingGame({ job }: { job: Job }) {
           <div className="watch-heading">
             <div>
               <strong>
-                {view.game.candidate_id} vs{" "}
-                {opponentName(view.game.opponent_id)}
+                {job.td_config ? (
+                  `${algorithmName(job)} self-play`
+                ) : (
+                  <>
+                    {view.game.candidate_id} vs{" "}
+                    {opponentName(view.game.opponent_id)}
+                  </>
+                )}
               </strong>
               <small>
-                Generation {view.game.generation} · Game {view.game.index + 1} ·
-                Candidate plays {color(view.game.candidate_side)}
+                {job.td_config ? (
+                  `Game ${view.game.generation} · The current learner plays both colors`
+                ) : (
+                  <>
+                    Generation {view.game.generation} · Game{" "}
+                    {view.game.index + 1} · Candidate plays{" "}
+                    {color(view.game.candidate_side)}
+                  </>
+                )}
               </small>
             </div>
             <button
@@ -173,15 +186,19 @@ export function TrainingGame({ job }: { job: Job }) {
           <div className="watch-players">
             <span>
               White:{" "}
-              {view.game.candidate_side === 0
-                ? view.game.candidate_id
-                : opponentName(view.game.opponent_id)}
+              {job.td_config
+                ? algorithmName(job)
+                : view.game.candidate_side === 0
+                  ? view.game.candidate_id
+                  : opponentName(view.game.opponent_id)}
             </span>
             <span>
               Black:{" "}
-              {view.game.candidate_side === 1
-                ? view.game.candidate_id
-                : opponentName(view.game.opponent_id)}
+              {job.td_config
+                ? algorithmName(job)
+                : view.game.candidate_side === 1
+                  ? view.game.candidate_id
+                  : opponentName(view.game.opponent_id)}
             </span>
           </div>
           <Board

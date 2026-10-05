@@ -2,7 +2,7 @@
 
 The server binds to loopback only. HTTP carries commands and authoritative
 snapshots; SSE carries small change notifications. Frontend types are in
-`web/src/api.ts`. Game behavior remains `long-nardy-fnr2026-nocube-v1`.
+`web/src/api.ts` and `web/src/jobs.ts`. Game behavior remains `long-nardy-fnr2026-nocube-v1`.
 
 ## Routes
 

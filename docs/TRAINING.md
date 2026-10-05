@@ -89,11 +89,11 @@ exact archive. Loading rejects incompatible versions, shapes, opponents, schedul
 and counters. Checkpointing and training never overwrite published models.
 
 Training allows population 4–128, generations 1–500, pairs per opponent 1–32,
-workers 1–8, and turn guards 1–10000. Combined budgets are capped at 200000 games
+workers 1–8, and turn guards 1–10000. GA combined budgets are capped at 200000 games
 and 200000000 turn slots. Evaluation allows at most eight opponents, 1000 games,
 and 5000000 turn slots. A directory holds at most 200 jobs; checkpoints and
 generation files are bounded to 16 MiB and control receipts to 4096 per job.
-Archive cleanup is manual in M3 while the data directory is closed.
+Archive cleanup is manual while the data directory is closed.
 
 Counters measure completed/truncated games, full-turn decisions, linear forward
 evaluations (including opponents), changed coefficients from mutation, and nonelite
@@ -157,12 +157,29 @@ forward evaluations, and `updates` (one per full turn). GA mutation/crossover
 counters remain zero. Each game's history reports mean absolute TD error and
 actual outcome/work; it is not calibrated win probability or an independent
 evaluation. Frozen neural packages can be evaluated or played from My bots without
-a learner. Browser configuration/charts are the remaining M4 UI task.
+a learner.
+
+In **Training**, select **TD(0)** or **TD(lambda)** under **Training method**.
+Set Games, Seed, Learning rate (alpha), Exploration (epsilon), and, for traces,
+Trace decay (lambda). Advanced settings contains the per-game turn guard. The
+neural smoke preset uses four games; defaults and durable limits match the CLI.
+GA-only population/workers/variation controls are absent from the neural form.
+**Stop and checkpoint** finishes the current bounded game; **Resume run** uses
+the exact saved configuration after restart.
+
+Run details show committed game checkpoints, actual decisions/forwards/updates,
+completed versus truncated games, and active wall time. **TD learning error**
+plots each game's measured mean absolute TD error; rendering retains only the
+latest 200 points while the snapshot retains full bounded history. This diagnostic
+does not measure playing strength or calibrated win probability. **Save neural
+snapshot** publishes the latest observed game checkpoint while learning can
+continue. The saved copy appears in My bots, with independent Evaluate and Play
+controls. Reopen the data directory to load the same immutable package.
 
 ## Training games on the board
 
 The Training screen includes automatic playback of actual matches sampled from
-completed worker batches. It shows the candidate, opponent, colors, opening dice,
+committed TD games or GA worker batches. It shows the participants, colors, opening dice,
 full-turn moves, board positions, and terminal result. Pause playback, move to a
 previous/next turn, drag the turn slider, or choose Slow/Normal/Fast speed.
 Follow training moves to the newest available sample after the current replay
@@ -172,6 +189,8 @@ Visual playback is independent of training. Training may finish many games while
 one replay plays, so this is explicitly sampled playback, not a claim to show every
 match in real time. No extra games or inference are performed for observation.
 The latest actual replay is included in each checkpoint and restored after restart.
+Neural runs identify the preview as TD self-play: the live learner plays both
+colors. The game number is its committed index, rather than a GA generation.
 Older checkpoints stay compatible; previously completed runs that did not record
 a preview have none. Resumable older runs capture new samples after resuming.
 Positions and legality remain authoritative in Go. A paused or hidden viewer never

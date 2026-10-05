@@ -1,8 +1,8 @@
 # Architecture
 
-M0–M3 provides the runnable application. M4 now includes its shared position
-encoder, neural network, frozen neural inference, and sequential TD self-play.
-Durable neural jobs use the shared queue; their UI remains subsequent work. Later modules are added
+M0–M4 provides the runnable application, shared position encoder, neural network,
+frozen neural inference, and sequential TD(0)/TD(lambda) self-play. Durable neural
+jobs and browser controls use the existing queue/library/evaluation lifecycle. Later modules are added
 with behavior rather than empty scaffolds.
 Go 1.25 with the standard library;
 React 19 + TypeScript 5 + Vite 7, with Vitest 4. Exact frontend versions are
@@ -66,6 +66,6 @@ replays are immutable.
 
 ## Later milestones
 
-M4 continues with its neural training UI. GA-MLP and Hybrid follow in M5;
+GA-MLP and Hybrid follow in M5;
 comparisons and release work remain M6–M7. The completed GA-linear lifecycle and random
 contracts are documented in [TRAINING.md](TRAINING.md).

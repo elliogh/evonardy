@@ -68,7 +68,7 @@ against independent closed-form calculations, verify stop-gradient targets, and
 exercise bounded real completed/truncated games. Actual replay reconstruction
 checks legality and terminal behavior. Exploration changes cannot change dice;
 forward/update counts are checked against observed actions. Durable CLI/API jobs
-use this boundary state; the neural training UI is the next M4 task.
+and the training UI use this boundary state.
 
 ## Accumulating TD(lambda) traces
 
@@ -131,3 +131,12 @@ earlier packages, and random streams are untouched. A save can run while subsequ
 games train. Same-platform continuous, safely stopped/reopened, and crash-recovered
 runs are checked against identical final weights, histories, counters, and content
 identities. Existing GA-linear records keep their original format and behavior.
+
+The browser selects GA-linear, TD(0), or TD(lambda) with method-specific settings.
+Neural progress counts game checkpoints and real TD updates; the diagnostic chart
+plots mean absolute TD error for the latest 200 saved games. It is not a win
+probability or strength estimate. A neural snapshot saves the latest observed
+game boundary for independent evaluation or play from My bots. The training board
+shows actual self-play replays with both colors identified as the current learner.
+Watching and human sessions consume no learner random draws; tests compare an
+observed/played/stopped/resumed run against uninterrupted self-play.

@@ -3,9 +3,9 @@
 [![CI](https://github.com/elliogh/evonardy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/elliogh/evonardy/actions/workflows/ci.yml)
 
 A local open-source **long nardy (long backgammon)** project with a Go backend
-and a React/TypeScript UI. M0–M3 implements the game engine, Random/Heuristic
+and a React/TypeScript UI. M0–M4 implements the game engine, Random/Heuristic
 agents, verifiable replays, browser play, a persistent bot library, and real
-GA-linear training with checkpoint/resume and independent evaluation.
+GA-linear and neural TD(0)/TD(lambda) training with checkpoint/resume and independent evaluation.
 
 The UI and all repository content are maintained in English.
 
@@ -52,8 +52,10 @@ bin/evonardy bots save --source builtin/heuristic-v1 --name "My baseline" --data
 bin/evonardy bots list --data-dir ./data
 ```
 
-Open **Training** to evolve linear weights through completed games. Use the smoke
-preset for a short run, choose an evaluated candidate, and save it to My bots.
+Open **Training** and select GA-linear, TD(0), or TD(lambda). Use the smoke preset
+for a short run, then save a GA candidate or a neural game checkpoint to My bots.
+Neural runs expose learning/exploration settings, actual TD updates, and measured
+TD error; these are diagnostics, not claims of playing strength.
 The **Training games** board automatically plays sampled actual matches from the
 run. Pause, step through turns, change playback speed, or follow newer games.
 Training continues at full speed while you watch. The latest sample survives
@@ -72,7 +74,7 @@ bin/evonardy resume --run <run-id> --data-dir ./data
 bin/evonardy evaluate --bot <saved-bot-id> --config configs/evaluation-smoke.json --data-dir ./data
 ```
 
-SIGINT/SIGTERM checkpoints an active job after its current bounded batch. See
+SIGINT/SIGTERM checkpoints an active job after its current bounded batch (one game for TD). See
 [docs/TRAINING.md](docs/TRAINING.md) for fitness, counters, limits, and reproducibility.
 
 Run bounded baseline simulations independently:
@@ -129,12 +131,12 @@ the shared `56 → 32 → 1` tanh network and its verified parameter gradients.
 Frozen neural models can be published/loaded through the Go library and played
 without a learner. [docs/TD.md](docs/TD.md) specifies sequential TD(0)/TD(lambda)
 learning and real self-play. Neural CLI/API jobs support safe stop, deterministic
-resume, frozen saves, and independent evaluation; their browser controls are the
-remaining M4 task. The bounded neural presets run four games each.
+resume, frozen saves, and independent evaluation. The browser uses the same
+methods and lifecycle. The bounded neural presets run four games each.
 
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build
-make smoke   # baselines/replays + 32 GA games, frozen save, 8 evaluation games
+make smoke   # baselines/replays + 32 GA and 8 TD games, frozen saves, 24 evaluation games
 make bench   # move generation, evaluation, simulation; measured time and allocations
 cd web && npx playwright install chromium
 cd .. && make e2e  # real local server; temporary data; full browser game and restart
@@ -156,6 +158,10 @@ refresh, server restart, draft undo, replay download, and a 390px viewport.
 M3 checks additionally train real coefficients, save/reload a candidate, run an
 independent evaluation, stop/resume after restart, and finish a game against the
 frozen bot while another run trains.
+M4 adds real TD(0) and TD(lambda) browser flows through train, frozen save, server
+restart, reload, independent evaluation, sampled self-play, stop/resume, and a
+complete game against the saved neural model. Watching or playing leaves learner
+streams and published weights unchanged.
 
 Tasks and current status: [GitHub Issues](https://github.com/elliogh/evonardy/issues)
 and the [EvoNardy roadmap](https://github.com/users/elliogh/projects/1).
