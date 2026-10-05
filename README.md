@@ -66,6 +66,8 @@ The shared offline lifecycle is also available (stop the server first):
 
 ```bash
 bin/evonardy train --config configs/ga-linear-smoke.json --data-dir ./data --save-name "My GA bot"
+bin/evonardy train --algorithm td0 --config configs/td-zero-smoke.json --data-dir ./data --save-name "My TD bot"
+bin/evonardy train --algorithm td-lambda --config configs/td-lambda-smoke.json --data-dir ./data --save-name "My trace bot"
 bin/evonardy resume --run <run-id> --data-dir ./data
 bin/evonardy evaluate --bot <saved-bot-id> --config configs/evaluation-smoke.json --data-dir ./data
 ```
@@ -126,7 +128,9 @@ a versioned 56-value position vector. [docs/NEURAL.md](docs/NEURAL.md) specifies
 the shared `56 → 32 → 1` tanh network and its verified parameter gradients.
 Frozen neural models can be published/loaded through the Go library and played
 without a learner. [docs/TD.md](docs/TD.md) specifies sequential TD(0)/TD(lambda)
-learning and real self-play. Neural training CLI/API/UI remain subsequent M4 tasks.
+learning and real self-play. Neural CLI/API jobs support safe stop, deterministic
+resume, frozen saves, and independent evaluation; their browser controls are the
+remaining M4 task. The bounded neural presets run four games each.
 
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build

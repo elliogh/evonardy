@@ -1,4 +1,4 @@
-# Local API and persistence — M3
+# Local API and persistence
 
 The server binds to loopback only. HTTP carries commands and authoritative
 snapshots; SSE carries small change notifications. Frontend types are in
@@ -20,7 +20,7 @@ snapshots; SSE carries small change notifications. Frontend types are in
 | POST | `/api/games/{id}/turn` | Confirm `{command_id, expected_version, turn:{steps:[...]}}` |
 | GET | `/api/games/{id}/events` | SSE `game.updated` with `{game_id, version}` |
 | GET | `/api/replays/{id}` | Completed replay download; unfinished games return 409 |
-| GET / POST | `/api/training/runs` | Run summaries / start `{command_id, expected_version:0, name, config}` |
+| GET / POST | `/api/training/runs` | Run summaries / start with GA `config` or neural `td_config` (see below) |
 | GET | `/api/training/runs/{id}` | Durable training snapshot |
 | POST | `/api/training/runs/{id}/stop` or `/resume` | `{command_id, expected_version}`; checkpoint or continue |
 | POST | `/api/training/runs/{id}/save-bot` | `{command_id, expected_version, generation, candidate_id, name}`; immutable bot card |
@@ -131,6 +131,26 @@ contracts, and checkpoint rules are in [TRAINING.md](TRAINING.md). Example JSON
 configs are in `configs/ga-linear-smoke.json` and `configs/evaluation-smoke.json`.
 Requests require a complete config; the CLI additionally merges config defaults.
 
+GA requests retain `{command_id, expected_version:0, name, config}` unchanged;
+optional `algorithm:"ga-linear-v1"` is accepted. Neural requests omit GA `config`
+and supply `td_config:{seed,games,max_turns,alpha,epsilon,lambda?}` instead, with
+optional `algorithm:"td-zero-v1"` (lambda=0) or `"td-lambda-v1"` (lambda>0).
+Mixed configurations and mismatching/unknown algorithm names return 400. Neural
+presets are `configs/td-zero-smoke.json` and `configs/td-lambda-smoke.json`;
+resource/update/random contracts are in [TD.md](TD.md).
+
+Neural snapshots have `config:null`, their versioned `algorithm`, `td_config`,
+`td_history` (one actual metric per committed game), and, after the first game,
+`neural_candidate:{id:"td-game-000001",game:1}` for the latest checkpoint.
+`generation` is the committed game index, `generation_games` is the cumulative
+committed game count, and `generation_budget` is the configured game budget;
+there are no GA candidates/fitness/history. `counters.updates` records actual TD
+updates and is omitted when zero for legacy compatibility. The shared save route
+uses `generation:<game-index>` and matching `candidate_id:"td-game-NNNNNN"` to
+publish any completed game checkpoint. The GA generation GET route is inapplicable
+to neural runs and returns 400. Public responses never include neural parameters,
+private learner state, random internals, archive hashes, or command receipts.
+
 A job's `version` increments only for accepted user controls: creation, stop,
 resume, and candidate save. Background progress increments `revision`, leaving
 control versions stable. Use `expected_version` for commands and `revision` to
@@ -148,6 +168,7 @@ Private population/checkpoint internals and command receipts are not exposed.
 List routes return summaries with history/candidates/publications/score arrays
 empty; GET retrieves details. Generation numbers are 1-based archive indices;
 candidate IDs are stable lineage identifiers, not bot IDs.
+Neural list summaries likewise omit the `td_history` detail array.
 
 Both event routes send `run.progress`, `checkpoint.saved`, `run.completed`, or
 `run.failed` with `{run_id,kind,state,version,revision,generation}`. Progress is
@@ -161,6 +182,9 @@ at `runs/<id>/generations/NNNN.json`, and evaluation checkpoints at
 `evaluations/<id>/checkpoint.json`. The server and offline CLI share the same
 exclusive data-directory owner and job manager. Training never modifies published
 models or human sessions. A saved candidate is playable while another job runs.
+Neural archives use the same directory, one immutable parameter/metric snapshot
+per game. Neural stop/shutdown commits at a game boundary; crash recovery reruns
+only uncommitted game work and verifies any already-created archive byte-for-byte.
 
 ## Watching training matches
 
@@ -168,6 +192,12 @@ models or human sessions. A saved candidate is playable while another job runs.
 zero-based game index within the generation, candidate/opponent IDs, candidate
 color, turn count, and status. It identifies one actual evaluated match from the
 most recently committed worker batch. No additional exhibition game is created.
+
+For neural self-play, `generation` is the committed game number and `game_index`
+is its zero-based index in the run. Both replay participant IDs are
+`<algorithm>/self-play`: this is the live sequential learner for both colors,
+not a match between frozen candidates. The recorded outcome/turn count agrees
+with that game's TD metric; reconstructed positions and view controls are unchanged.
 
 `GET /api/training/runs/{id}/watch` returns that notice together with `replay` and
 `positions`. Positions come from Go replay validation: item 0 is the opening

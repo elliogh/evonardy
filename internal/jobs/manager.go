@@ -42,8 +42,10 @@ var ErrNotFound = errors.New("job not found")
 
 type StartRequest struct {
 	library.Command
-	Name   string          `json:"name"`
-	Config training.Config `json:"config"`
+	Name      string             `json:"name"`
+	Config    training.Config    `json:"config"`
+	Algorithm string             `json:"algorithm,omitempty"`
+	TDConfig  *training.TDConfig `json:"td_config,omitempty"`
 }
 type SaveRequest struct {
 	library.Command
@@ -104,6 +106,10 @@ type Snapshot struct {
 	Error            string               `json:"error"`
 	CanResume        bool                 `json:"can_resume"`
 	Config           *training.Config     `json:"config"`
+	Algorithm        string               `json:"algorithm,omitempty"`
+	TDConfig         *training.TDConfig   `json:"td_config,omitempty"`
+	TDHistory        []training.TDMetric  `json:"td_history,omitempty"`
+	NeuralCandidate  *NeuralCandidate     `json:"neural_candidate,omitempty"`
 	Generation       int                  `json:"generation"`
 	GenerationGames  int                  `json:"generation_games"`
 	GenerationBudget int                  `json:"generation_budget"`
@@ -135,6 +141,7 @@ type record struct {
 	CreationHash     string               `json:"creation_hash"`
 	Commands         map[string]receipt   `json:"commands"`
 	Training         *training.State      `json:"training"`
+	TDTraining       *training.TDState    `json:"td_training,omitempty"`
 	FrozenEvaluation *evaluationState     `json:"frozen_evaluation"`
 	GenerationHashes []string             `json:"generation_hashes"`
 	WatchReplay      *training.PlayedGame `json:"watch_replay,omitempty"`
@@ -231,6 +238,9 @@ func generationPath(id string, g int) string {
 func syncSnapshot(r *record) {
 	r.WatchedGame = gameNotice(r.WatchReplay)
 	r.CanResume = r.State == Stopped || r.State == Interrupted
+	if r.TDTraining != nil {
+		syncTDSnapshot(r)
+	}
 	if r.Training != nil {
 		st := r.Training
 		c := st.Config
@@ -328,6 +338,7 @@ func (m *Manager) List(kind string) ([]Snapshot, error) {
 			// Lists carry summaries; large generation and game records belong to GET.
 			r.Candidates = []training.Candidate{}
 			r.History = []training.Metric{}
+			r.TDHistory = nil
 			r.Saved = []Publication{}
 			if r.Evaluation != nil {
 				e := *r.Evaluation
@@ -369,12 +380,26 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (Snapshot, error)
 	if m.closing || !library.ValidCommandID(req.CommandID) || req.ExpectedVersion != 0 || strings.TrimSpace(req.Name) == "" || len(req.Name) > 128 || len(m.records) >= 200 {
 		return Snapshot{}, fmt.Errorf("%w: invalid run name, command, or capacity", ErrInvalid)
 	}
-	st, err := training.New(req.Config)
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("%w: %v", ErrInvalid, err)
-	}
 	r := initial(req.CommandID, Training, strings.TrimSpace(req.Name), fp)
-	r.Training = &st
+	if req.TDConfig != nil {
+		if req.Config != (training.Config{}) || req.TDConfig.Games > maxTDJobGames || (req.Algorithm != "" && req.Algorithm != req.TDConfig.Algorithm()) {
+			return Snapshot{}, fmt.Errorf("%w: incompatible neural configuration or game budget", ErrInvalid)
+		}
+		st, err := training.NewTD(*req.TDConfig)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		r.TDTraining = &st
+	} else {
+		if req.Algorithm != "" && req.Algorithm != training.Algorithm {
+			return Snapshot{}, fmt.Errorf("%w: unsupported training algorithm", ErrInvalid)
+		}
+		st, err := training.New(req.Config)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		r.Training = &st
+	}
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
@@ -508,6 +533,9 @@ func (m *Manager) Save(ctx context.Context, id string, req SaveRequest) (library
 		detail, err := m.bots.Get(r.Commands[req.CommandID].BotID)
 		return detail.Card, err
 	}
+	if r.TDTraining != nil {
+		return m.saveTD(ctx, r, next, req)
+	}
 	if r.Kind != Training || req.Generation < 1 || req.Generation > len(r.GenerationHashes) {
 		return library.Card{}, fmt.Errorf("%w: choose an evaluated generation", ErrInvalid)
 	}
@@ -568,6 +596,9 @@ func (m *Manager) Generation(id string, n int) (training.Generation, error) {
 	}
 	if n < 1 || n > len(r.GenerationHashes) {
 		return training.Generation{}, ErrNotFound
+	}
+	if r.TDTraining != nil {
+		return training.Generation{}, fmt.Errorf("%w: neural runs archive game checkpoints, not evaluated generations", ErrInvalid)
 	}
 	return m.generation(r, n)
 }
@@ -651,6 +682,13 @@ func (m *Manager) storageFailure(id string, err error) {
 	m.changed = make(chan struct{})
 }
 func (m *Manager) run(id string) {
+	m.mu.Lock()
+	isTD := m.records[id].TDTraining != nil
+	m.mu.Unlock()
+	if isTD {
+		m.runTD(id)
+		return
+	}
 	for {
 		m.mu.Lock()
 		r := m.records[id]
@@ -801,6 +839,9 @@ func validate(r record) error {
 		return fmt.Errorf("invalid job state")
 	}
 	if r.Kind == Training {
+		if r.TDTraining != nil {
+			return validateTDRecord(r)
+		}
 		if r.Training == nil || r.FrozenEvaluation != nil || len(r.GenerationHashes) != r.Training.Generation {
 			return fmt.Errorf("invalid training archive references")
 		}
@@ -818,7 +859,7 @@ func validate(r record) error {
 			return fmt.Errorf("training replay in evaluation checkpoint")
 		}
 		e := r.FrozenEvaluation
-		if e == nil || r.Training != nil || e.Algorithm != "paired-evaluation-v1" || e.Ruleset != game.Ruleset || e.FeaturesVersion != features.Version {
+		if e == nil || r.Training != nil || r.TDTraining != nil || e.Algorithm != "paired-evaluation-v1" || e.Ruleset != game.Ruleset || e.FeaturesVersion != features.Version {
 			return fmt.Errorf("incompatible evaluation checkpoint")
 		}
 		if err := e.Config.Validate(); err != nil {
@@ -858,7 +899,7 @@ func validate(r record) error {
 			decisions += uint64(score.Turns)
 			forwards += uint64(score.ForwardEvaluations)
 		}
-		if r.Counters.Games != uint64(len(e.Results)) || r.Counters.CompletedGames != completed || r.Counters.TruncatedGames != truncated || r.Counters.Decisions != decisions || r.Counters.ForwardEvaluations != forwards || r.Counters.Mutations != 0 || r.Counters.Crossovers != 0 {
+		if r.Counters.Games != uint64(len(e.Results)) || r.Counters.CompletedGames != completed || r.Counters.TruncatedGames != truncated || r.Counters.Decisions != decisions || r.Counters.ForwardEvaluations != forwards || r.Counters.Mutations != 0 || r.Counters.Crossovers != 0 || r.Counters.Updates != 0 {
 			return fmt.Errorf("evaluation counters mismatch")
 		}
 		if r.State == Completed {

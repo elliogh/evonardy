@@ -1,0 +1,7 @@
+{
+  "seed": 42,
+  "games": 4,
+  "max_turns": 1200,
+  "alpha": 0.001,
+  "epsilon": 0.05
+}

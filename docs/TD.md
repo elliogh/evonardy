@@ -67,8 +67,8 @@ Tests check all parameter updates on artificial White/Black/nonterminal transiti
 against independent closed-form calculations, verify stop-gradient targets, and
 exercise bounded real completed/truncated games. Actual replay reconstruction
 checks legality and terminal behavior. Exploration changes cannot change dice;
-forward/update counts are checked against observed actions. Durable
-CLI/API jobs and the neural training UI remain subsequent M4 tasks.
+forward/update counts are checked against observed actions. Durable CLI/API jobs
+use this boundary state; the neural training UI is the next M4 task.
 
 ## Accumulating TD(lambda) traces
 
@@ -97,3 +97,37 @@ after truncation and restore. Boundary states therefore need no pending traces;
 no unfinished game is checkpointed. Independent one-neuron trajectory calculations
 verify every trace and parameter, lambda=0 behavior, terminal/manual/replacement
 reset, atomic failure, and identical next games after boundary JSON restoration.
+
+## Durable jobs and frozen saves
+
+The shared job manager accepts `td_config` with optional matching `algorithm`.
+CLI names are `td0` and `td-lambda`; wire/checkpoint names are `td-zero-v1` and
+`td-lambda-v1`. The latter requires positive lambda in the CLI. See
+[TRAINING.md](TRAINING.md) for commands and [API.md](API.md) for the public DTO.
+
+One learner runs sequentially. After each game, the manager archives its actual
+parameters/metric, then atomically publishes the boundary checkpoint. Stop and
+shutdown finish the current bounded game before dispatching any more; an abrupt
+crash discards uncommitted game work. Resume reconstructs all named random streams
+from the saved seed, random contract, and next game index, with fresh zero traces.
+There is no mutable PRNG or unfinished gradient state across a boundary.
+
+The optimizer is sequential plain SGD, fixed by the algorithm version: gamma=1,
+constant alpha, no momentum or adaptive moments. Checkpoints retain algorithm,
+rules/encoder/network/random versions, config, parameters, completed game index,
+history, actual work counters, latest real replay, immutable archive references,
+and command receipts. Traces are empty and need no serialization here. A checksum
+protects the complete private record; recovery validates state and replay contracts.
+
+Durable jobs allow at most 10000 games to bound history in the shared 16 MiB
+checkpoint. Pure runner bounds still apply. Each game archive contains 1857
+parameters and one metric; total disk use grows with the chosen budget. Archives
+are retained until manual cleanup with the data directory closed. Shared capacity
+is 200 jobs and 4096 control receipts per job. No parallel learner workers exist.
+
+Manual save chooses any committed game checkpoint, checks its checksum/contracts,
+and publishes a separate immutable neural inference package. The live learner,
+earlier packages, and random streams are untouched. A save can run while subsequent
+games train. Same-platform continuous, safely stopped/reopened, and crash-recovered
+runs are checked against identical final weights, histories, counters, and content
+identities. Existing GA-linear records keep their original format and behavior.
