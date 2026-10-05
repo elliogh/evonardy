@@ -35,7 +35,7 @@ remain versioned with code. GitHub is authoritative for tasks and status;
 active backlog. Historical issues retain those actual results and local commit
 references without inventing PRs or original GitHub completion dates.
 
-The tracker was migrated without pushing code. Existing implementation commits
-and local templates become available in the remote repository after a separately
-authorized push. Creating tasks does not authorize a push, long training, or a
-release publication.
+The tracker was initially migrated without pushing code. The subsequently
+authorized publication introduces the original implementation and templates into
+`main` through scoped, issue-linked PRs while preserving the original commits.
+Creating tasks does not authorize a push, long training, or a release publication.
