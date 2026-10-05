@@ -70,5 +70,33 @@ an ordinary SGD step, concurrent evaluation, and invalid/nonfinite/overflow inpu
 
 Changing architecture, activation, parameter ordering, or initialization
 semantics requires a new version and explicit compatibility checks. This module
-does not yet publish/load neural packages or connect them to game agents and
-training; these are subsequent M4 tasks. Existing linear models remain unchanged.
+supports frozen inference through the library and game agent described below.
+Neural learning remains subsequent M4 work. Existing linear models remain unchanged.
+
+## Frozen inference packages
+
+`library.SaveNeural` copies a parameter snapshot into the existing immutable
+bundle format. `manifest.json` identifies the evaluator with the network version,
+the encoder through `features_version`, and the `[56,32,1]` architecture.
+`model.json` contains `weights`, the 1857 parameters in the ordering above.
+Inference uses the White perspective, win objective, zero exploration, and
+`stable_first` ties. Identity covers the model checksum and these contracts.
+
+Loading verifies strict JSON, checksums, versions, architecture, parameter count,
+finite weights within ±1000000, and the existing file bounds: manifest/model
+64 KiB each and metadata 1 MiB. Incompatible packages remain visible with their
+reason. New neural support preserves existing linear/random identities and JSON.
+Rename changes metadata only; learner updates and later saves cannot alter an
+earlier bundle. Saving identical strategies deduplicates without overwriting.
+
+`agent.Neural` owns its network. It consumes Go-generated legal successors,
+maximizes their values for White and minimizes for Black, and selects the first
+action on exact ties. Immediate victories override all network scores. Terminal
+values are exact White `+1` or Black `-1`; nonterminal values use the network.
+Known/future dice and exploration do not enter ranking. Measured inference counts
+only actual network forward evaluations, excluding terminal overrides.
+
+`library.Freeze` stores versioned parameters in a comparable, fixed-size value
+array. JSON loading checks its exact shape rather than silently padding/truncating
+arrays. Legacy policies omit new zero-valued fields, preserving old checkpoints.
+Each game constructs its own inference instance without a learner or neural RNG.
