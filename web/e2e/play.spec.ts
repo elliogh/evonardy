@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Bot, Snapshot } from "../src/api";
@@ -570,3 +570,274 @@ test("train, publish, independently evaluate, resume after restart, and play a f
   await expect(card).toContainText("4 games");
   expect(errors).toEqual([]);
 });
+
+for (const method of ["td0", "td-lambda"] as const) {
+  const label = method === "td0" ? "TD(0)" : "TD(lambda)";
+  test(`${label}: train, save, restart, evaluate, watch, and play a real neural model`, async ({
+    page,
+    context,
+  }, info) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/#/training");
+    await page
+      .getByRole("combobox", { name: "Training method", exact: true })
+      .selectOption(method);
+    await page
+      .getByRole("button", { name: "Use smoke preset", exact: true })
+      .click();
+    await expect(
+      page.getByRole("spinbutton", { name: "Games", exact: true }),
+    ).toHaveValue("4");
+    await expect(
+      page.getByRole("spinbutton", { name: "Population", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("spinbutton", { name: "Workers", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("textbox", { name: "Run name", exact: true })
+      .fill(`M4 ${method} smoke`);
+    await page
+      .getByRole("button", { name: "Start training", exact: true })
+      .click();
+    await expect(page).toHaveURL(/#\/training\//);
+    const id = page.url().split("/training/")[1];
+    const job = async (runID = id): Promise<Job> => {
+      const response = await page.request.get(`/api/training/runs/${runID}`);
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    };
+    await expect
+      .poll(async () => (await job()).state, { timeout: 60000 })
+      .toBe("completed");
+    await expect(page.locator(".job-state")).toHaveAttribute(
+      "data-state",
+      "completed",
+    );
+    const trained = await job();
+    expect(trained.algorithm).toBe(
+      method === "td0" ? "td-zero-v1" : "td-lambda-v1",
+    );
+    expect(trained.td_config?.lambda ?? 0).toBe(method === "td0" ? 0 : 0.7);
+    expect(trained.counters.games).toBe(4);
+    expect(trained.counters.completed_games).toBe(4);
+    expect(trained.counters.updates).toBeGreaterThan(0);
+    expect(trained.counters.updates).toBe(trained.counters.decisions);
+    expect(trained.counters.mutations).toBe(0);
+    expect(trained.td_history).toHaveLength(4);
+    await expect(page.locator("[data-updates]")).toHaveAttribute(
+      "data-updates",
+      String(trained.counters.updates),
+    );
+    await expect(
+      page.getByRole("img", {
+        name: "Mean absolute TD error per saved game",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Generation fitness", exact: true }),
+    ).toHaveCount(0);
+
+    const viewer = page.locator(".watched-match");
+    await expect(viewer).toBeVisible();
+    await expect(viewer).toContainText(`${label} self-play`);
+    await page
+      .getByRole("button", { name: "Pause playback", exact: true })
+      .click();
+    const watched = await (
+      await page.request.get(`/api/training/runs/${id}/watch`)
+    ).json();
+    const latest = page.getByRole("button", {
+      name: "Show latest game",
+      exact: true,
+    });
+    if (await latest.isEnabled()) await latest.click();
+    await expect(viewer).toHaveAttribute("data-game-key", watched.key);
+    const slider = page.getByRole("slider", {
+      name: "Training game turn",
+      exact: true,
+    });
+    await slider.focus();
+    await slider.press("Home");
+    await slider.press("ArrowRight");
+    await expect(viewer).toHaveAttribute("data-frame", "1");
+    const position: Snapshot["position"] = watched.positions[1];
+    for (let point = 0; point < 24; point++) {
+      const count = position.checkers[0][point] + position.checkers[1][point];
+      const player = position.checkers[0][point] > 0 ? "White" : "Black";
+      await expect(viewer.locator(`[data-point="${point}"]`)).toHaveAttribute(
+        "aria-label",
+        `Point ${point + 1}, ${count ? `${count} ${player} checkers` : "empty"}`,
+      );
+    }
+    await page
+      .getByRole("textbox", { name: "Bot name", exact: true })
+      .fill(`M4 ${method} bot`);
+    await page
+      .getByRole("button", { name: "Save neural snapshot", exact: true })
+      .click();
+    await expect(
+      page.getByRole("link", { name: "Evaluate this bot", exact: true }),
+    ).toBeVisible();
+    const bots: Bot[] = await (await page.request.get("/api/bots")).json();
+    const bot = bots.find((b) => b.name === `M4 ${method} bot`)!;
+    expect(bot?.kind).toBe("tanh-56-32-1-v1");
+    const detail = await (await page.request.get(`/api/bots/${bot.id}`)).json();
+    expect(detail.manifest.architecture).toEqual([56, 32, 1]);
+    const modelPath = `${dataDir}/bots/${bot.id}/model.json`;
+    const modelBefore = await readFile(modelPath, "utf8");
+    const weights = JSON.parse(modelBefore).weights;
+    expect(weights).toHaveLength(1857);
+    const checkpoint = JSON.parse(
+      await readFile(`${dataDir}/runs/${id}/checkpoint.json`, "utf8"),
+    );
+    expect(weights).toEqual(checkpoint.record.td_training.parameters);
+    await page.screenshot({
+      path: info.outputPath(`${method}-desktop.png`),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: info.outputPath(`${method}-mobile.png`),
+      fullPage: true,
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 900 });
+
+    await stop();
+    await start();
+    await page.reload();
+    await expect(viewer).toHaveAttribute("data-game-key", watched.key);
+    expect((await job()).td_history).toEqual(trained.td_history);
+    expect((await job()).counters).toEqual(trained.counters);
+    expect(
+      await (await page.request.get(`/api/bots/${bot.id}`)).json(),
+    ).toEqual(detail);
+    await page.getByRole("link", { name: "My bots", exact: true }).click();
+    const card = page
+      .locator(".bot-card")
+      .filter({
+        has: page.getByRole("heading", { name: bot.name, exact: true }),
+      });
+    await expect(card).toContainText("A frozen neural strategy");
+    await card
+      .getByRole("link", { name: `Evaluate ${bot.name}`, exact: true })
+      .click();
+    await page
+      .getByRole("spinbutton", { name: "Pairs per opponent", exact: true })
+      .fill("1");
+    await page
+      .getByRole("button", { name: "Start evaluation", exact: true })
+      .click();
+    await expect(page).toHaveURL(/#\/evaluations\//);
+    const evaluationID = page.url().split("/evaluations/")[1];
+    const evaluation = async (): Promise<Job> =>
+      (await page.request.get(`/api/evaluations/${evaluationID}`)).json();
+    await expect
+      .poll(async () => (await evaluation()).state, { timeout: 60000 })
+      .toBe("completed");
+    expect((await evaluation()).evaluation?.stats?.games).toBe(4);
+    expect((await evaluation()).counters.updates ?? 0).toBe(0);
+    await expect(page.getByText("Win rate", { exact: true })).toBeVisible();
+
+    // Play the immutable model while another learner runs; pause the viewer only.
+    // Stop early so the larger budget is a guard, not a long verification run.
+    await page.goto("/#/training");
+    await page
+      .getByRole("combobox", { name: "Training method", exact: true })
+      .selectOption(method);
+    await page
+      .getByRole("button", { name: "Use smoke preset", exact: true })
+      .click();
+    await page
+      .getByRole("spinbutton", { name: "Games", exact: true })
+      .fill("128");
+    await page
+      .getByRole("button", { name: "Start training", exact: true })
+      .click();
+    await expect(page).toHaveURL(/#\/training\//);
+    const other = page.url().split("/training/")[1];
+    await expect(viewer).toBeVisible();
+    await page
+      .getByRole("button", { name: "Pause playback", exact: true })
+      .click();
+    const frame = await viewer.getAttribute("data-frame");
+    const key = await viewer.getAttribute("data-game-key");
+    const before = await job(other);
+    expect(before.state).toBe("running");
+    await expect
+      .poll(async () => (await job(other)).counters.games)
+      .toBeGreaterThan(before.counters.games);
+    await expect(viewer).toHaveAttribute("data-frame", frame!);
+    await expect(viewer).toHaveAttribute("data-game-key", key!);
+    const player = await context.newPage();
+    player.on("pageerror", (e) => errors.push(e.message));
+    await player.goto("/");
+    await player
+      .getByRole("button", { name: `Play against ${bot.name}`, exact: true })
+      .click();
+    await expect(player).toHaveURL(/#\/games\//);
+    const gameID = player.url().split("/games/")[1];
+    expect((await job(other)).state).toBe("running");
+    await page
+      .getByRole("button", { name: "Stop and checkpoint", exact: true })
+      .click();
+    await expect(page.locator(".job-state")).toHaveAttribute(
+      "data-state",
+      "stopped",
+    );
+    const stopped = await job(other);
+    expect(stopped.counters.games).toBeGreaterThan(0);
+    expect(stopped.counters.games).toBeLessThan(128);
+    const game = await snapshot(player, gameID);
+    await stop();
+    await start();
+    await page.reload();
+    await player.reload();
+    await rendered(player, game);
+    expect(await snapshot(player, gameID)).toEqual(game);
+    expect((await job(other)).counters).toEqual(stopped.counters);
+    await page.getByRole("button", { name: "Resume run", exact: true }).click();
+    await expect
+      .poll(async () => (await job(other)).counters.games)
+      .toBeGreaterThan(stopped.counters.games);
+    await page
+      .getByRole("button", { name: "Stop and checkpoint", exact: true })
+      .click();
+    await expect(page.locator(".job-state")).toHaveAttribute(
+      "data-state",
+      "stopped",
+    );
+    let x = game;
+    let commands = 0;
+    while (x.phase !== "finished" && commands++ < 1500) {
+      if (x.phase === "awaiting_roll")
+        x = await buttonCommand(player, gameID, "Roll dice");
+      while (!x.continuations.complete) x = await firstStep(player, gameID);
+      x = await buttonCommand(
+        player,
+        gameID,
+        x.draft.length ? "Confirm turn" : "Pass turn",
+      );
+    }
+    expect(x.phase).toBe("finished");
+    expect(
+      (await (await player.request.get(`/api/replays/${gameID}`)).json())
+        .status,
+    ).toBe("completed");
+    expect(await readFile(modelPath, "utf8")).toBe(modelBefore);
+    expect(
+      await (await page.request.get(`/api/bots/${bot.id}`)).json(),
+    ).toEqual(detail);
+    await player.close();
+    await page.getByRole("link", { name: "My bots", exact: true }).click();
+    await expect(card).toContainText("4 games");
+    expect(errors).toEqual([]);
+  });
+}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"evonardy/internal/agent"
+	"evonardy/internal/app"
 	"evonardy/internal/game"
 	"evonardy/internal/jobs"
 	"evonardy/internal/library"
@@ -61,6 +62,35 @@ func TestNeuralJobsStopResumeAndFrozenPublication(t *testing.T) {
 			frozen, err := bots.Freeze(early.ID)
 			if err != nil || frozen.Kind != "neural" {
 				t.Fatal("missing frozen neural model")
+			}
+			// Observe repeatedly and play one full human/bot turn during learning.
+			// The uninterrupted comparison below must retain identical learner work.
+			for range 3 {
+				if _, err := m.Watch(x.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			player := app.New(store, bots, app.Options{Seed: func() (uint64, error) { return 42, nil }})
+			session, err := player.Create(ctx, app.CreateRequest{Command: library.Command{CommandID: "during-neural-play"}, BotID: early.ID, Human: game.White})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if session.Phase == app.AwaitingRoll {
+				session, err = player.Roll(ctx, session.ID, library.Command{CommandID: "during-neural-roll", ExpectedVersion: session.Version})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			paths, err := game.LegalPaths(session.Position, *session.Dice)
+			if err != nil || len(paths) == 0 {
+				t.Fatal("missing real human action", err)
+			}
+			session, err = player.SetDraft(ctx, session.ID, app.DraftRequest{Command: library.Command{CommandID: "during-neural-draft", ExpectedVersion: session.Version}, Prefix: paths[0].Steps})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := player.Confirm(ctx, session.ID, app.TurnRequest{Command: library.Command{CommandID: "during-neural-turn", ExpectedVersion: session.Version}, Turn: paths[0]}); err != nil {
+				t.Fatal(err)
 			}
 			x, _ = m.Get(x.ID)
 			stop := library.Command{CommandID: "stop-neural", ExpectedVersion: x.Version}

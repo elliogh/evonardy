@@ -25,6 +25,31 @@ export const defaults: TrainingConfig = {
   initial_sigma: 0.4,
   mutation_sigma: 0.15,
 };
+export type TDConfig = {
+  seed: number;
+  games: number;
+  max_turns: number;
+  alpha: number;
+  epsilon: number;
+  lambda?: number;
+};
+export const tdDefaults: Required<TDConfig> = {
+  seed: 42,
+  games: 32,
+  max_turns: 1200,
+  alpha: 0.001,
+  epsilon: 0.05,
+  lambda: 0.7,
+};
+export type TDMetric = {
+  game: number;
+  status: string;
+  outcome: { winner: 0 | 1; mars: boolean; points: number } | null;
+  decisions: number;
+  forward_evaluations: number;
+  updates: number;
+  mean_abs_delta: number;
+};
 export type EvaluationConfig = {
   seed: number;
   pairs: number;
@@ -69,6 +94,10 @@ export type Job = {
   created_at: string;
   updated_at: string;
   config: TrainingConfig | null;
+  algorithm?: string;
+  td_config?: TDConfig;
+  td_history?: TDMetric[];
+  neural_candidate?: { id: string; game: number };
   generation: number;
   generation_games: number;
   generation_budget: number;
@@ -80,6 +109,7 @@ export type Job = {
     forward_evaluations: number;
     mutations: number;
     crossovers: number;
+    updates?: number;
   };
   history: Metric[];
   candidates: Candidate[];
@@ -105,6 +135,12 @@ export const failure = (e: unknown) =>
   e instanceof Error ? e.message : "Something went wrong";
 export const active = (x: Job) =>
   ["queued", "running", "stopping"].includes(x.state);
+export const algorithmName = (x: Job) =>
+  x.algorithm === "td-zero-v1"
+    ? "TD(0)"
+    : x.algorithm === "td-lambda-v1"
+      ? "TD(lambda)"
+      : "GA-linear";
 export const jobPath = (kind: string) =>
   kind === "training" ? "/training/runs" : "/evaluations";
 export function useJob(path: string) {

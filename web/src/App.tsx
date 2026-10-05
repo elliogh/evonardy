@@ -182,7 +182,9 @@ function Library() {
                   ? "A fresh choice from every legal position."
                   : bot.builtin
                     ? "A steady eye for distance, home, and blocks."
-                    : "A frozen linear strategy, ready to play."}
+                    : bot.kind === "tanh-56-32-1-v1"
+                      ? "A frozen neural strategy, ready to play."
+                      : "A frozen linear strategy, ready to play."}
               </p>
               <dl>
                 <div>

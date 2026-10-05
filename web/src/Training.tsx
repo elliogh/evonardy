@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { api, command } from "./api";
 import type { Bot } from "./api";
-import { active, defaults, failure, jobPath, useJob } from "./jobs";
+import {
+  active,
+  algorithmName,
+  defaults,
+  failure,
+  jobPath,
+  tdDefaults,
+  useJob,
+} from "./jobs";
 import type {
   Candidate,
   EvaluationConfig,
@@ -9,8 +17,10 @@ import type {
   Job,
   Metric,
   TrainingConfig,
+  TDConfig,
 } from "./jobs";
 import { TrainingGame } from "./TrainingGame";
+import { NeuralSnapshot, TDChart } from "./NeuralTraining";
 
 function NumberField({
   label,
@@ -25,7 +35,7 @@ function NumberField({
   onChange: (n: number) => void;
   min: number;
   max: number;
-  step?: number;
+  step?: number | "any";
 }) {
   return (
     <label>
@@ -78,7 +88,7 @@ export function Jobs({
         </h1>
         <p className="intro">
           {kind === "training"
-            ? "Evolve nine weights through real games. Keep any evaluated candidate and make it your own."
+            ? "Train through real games with GA-linear or neural TD learning. Save a strategy, test it independently, and play."
             : "Paired games on fresh dice seeds. The selected model stays fixed throughout the evaluation."}
         </p>
       </section>
@@ -120,7 +130,7 @@ export function Jobs({
                     {new Date(x.created_at).toLocaleString("en")} ·{" "}
                     {x.counters.games} games ·{" "}
                     {kind === "training"
-                      ? `${x.generation} generations`
+                      ? `${algorithmName(x)}${x.td_config ? " self-play" : ` · ${x.generation} generations`}`
                       : `${x.evaluation?.stats?.wins ?? "—"} wins`}
                   </small>
                 </span>
@@ -135,7 +145,9 @@ export function Jobs({
 }
 function TrainingForm() {
   const [cfg, setConfig] = useState<TrainingConfig>({ ...defaults });
-  const [name, setName] = useState("My first GA bot");
+  const [method, setMethod] = useState("ga-linear");
+  const [td, setTD] = useState<Required<TDConfig>>({ ...tdDefaults });
+  const [name, setName] = useState("My first bot");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const field = (
@@ -154,6 +166,28 @@ function TrainingForm() {
       onChange={(n) => setConfig((c) => ({ ...c, [key]: n }))}
     />
   );
+  const tdField = (
+    key: keyof TDConfig,
+    label: string,
+    min: number,
+    max: number,
+    step: number | "any" = 1,
+  ) => (
+    <NumberField
+      label={label}
+      value={td[key]}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(n) => setTD((c) => ({ ...c, [key]: n }))}
+    />
+  );
+  const neural = method !== "ga-linear";
+  const methodName = neural
+    ? method === "td0"
+      ? "TD(0)"
+      : "TD(lambda)"
+    : "GA-linear";
   return (
     <form
       className="lab-panel"
@@ -162,10 +196,26 @@ function TrainingForm() {
         setBusy(true);
         setError("");
         try {
+          if (neural && td.alpha <= 0) {
+            throw new Error("Learning rate must be greater than zero.");
+          }
+          if (method === "td-lambda" && td.lambda <= 0) {
+            throw new Error(
+              "Trace decay must be greater than zero for TD(lambda). Choose TD(0) to train without traces.",
+            );
+          }
           const x = await api<Job>("/training/runs", "POST", {
             ...command(0),
             name,
-            config: cfg,
+            ...(neural
+              ? {
+                  algorithm: method === "td0" ? "td-zero-v1" : "td-lambda-v1",
+                  td_config: {
+                    ...td,
+                    lambda: method === "td0" ? 0 : td.lambda,
+                  },
+                }
+              : { config: cfg }),
           });
           window.location.hash = `/training/${x.id}`;
         } catch (e) {
@@ -178,24 +228,34 @@ function TrainingForm() {
       <div className="section-heading">
         <div>
           <p className="eyebrow">NEW EXPERIMENT</p>
-          <h2>GA-linear</h2>
+          <h2>{methodName}</h2>
         </div>
         <button
           type="button"
           disabled={busy}
           onClick={() =>
-            setConfig({
-              ...defaults,
-              population: 4,
-              generations: 2,
-              pairs_per_opponent: 1,
-            })
+            neural
+              ? setTD({ ...tdDefaults, games: 4 })
+              : setConfig({
+                  ...defaults,
+                  population: 4,
+                  generations: 2,
+                  pairs_per_opponent: 1,
+                })
           }
         >
           Use smoke preset
         </button>
       </div>
       <fieldset disabled={busy} className="form-fields">
+        <label className="wide">
+          Training method
+          <select value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option value="ga-linear">GA-linear</option>
+            <option value="td0">TD(0)</option>
+            <option value="td-lambda">TD(lambda)</option>
+          </select>
+        </label>
         <label className="wide">
           Run name
           <input
@@ -205,31 +265,56 @@ function TrainingForm() {
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-        {field("seed", "Seed", 0, Number.MAX_SAFE_INTEGER)}
-        {field("population", "Population", 4, 128)}
-        {field("generations", "Generations", 1, 500)}
-        {field("pairs_per_opponent", "Pairs per opponent", 1, 32)}
-        {field("workers", "Workers", 1, 8)}
+        {neural ? (
+          <>
+            {tdField("seed", "Seed", 0, Number.MAX_SAFE_INTEGER)}
+            {tdField("games", "Games", 1, 10000)}
+            {tdField("alpha", "Learning rate (alpha)", 0, 1, "any")}
+            {tdField("epsilon", "Exploration (epsilon)", 0, 1, "any")}
+            {method === "td-lambda" &&
+              tdField("lambda", "Trace decay (lambda)", 0, 1, "any")}
+          </>
+        ) : (
+          <>
+            {field("seed", "Seed", 0, Number.MAX_SAFE_INTEGER)}
+            {field("population", "Population", 4, 128)}
+            {field("generations", "Generations", 1, 500)}
+            {field("pairs_per_opponent", "Pairs per opponent", 1, 32)}
+            {field("workers", "Workers", 1, 8)}
+          </>
+        )}
       </fieldset>
       <details>
         <summary>Advanced settings</summary>
         <fieldset disabled={busy} className="form-fields">
-          {field("elite_fraction", "Elite fraction", 0.05, 0.5, 0.01)}
-          {field("tournament_size", "Tournament size", 2, cfg.population)}
-          {field("initial_sigma", "Initial spread", 0.01, 3, 0.01)}
-          {field("mutation_sigma", "Mutation scale", 0.01, 3, 0.01)}
-          {field("max_turns", "Turn limit per game", 1, 10000)}
+          {neural ? (
+            tdField("max_turns", "Turn limit per game", 1, 10000)
+          ) : (
+            <>
+              {field("elite_fraction", "Elite fraction", 0.05, 0.5, 0.01)}
+              {field("tournament_size", "Tournament size", 2, cfg.population)}
+              {field("initial_sigma", "Initial spread", 0.01, 3, 0.01)}
+              {field("mutation_sigma", "Mutation scale", 0.01, 3, 0.01)}
+              {field("max_turns", "Turn limit per game", 1, 10000)}
+            </>
+          )}
         </fieldset>
       </details>
       <p className="muted">
-        {(
-          cfg.population *
-          cfg.generations *
-          cfg.pairs_per_opponent *
-          4
-        ).toLocaleString("en")}{" "}
-        games planned against Heuristic and Random, balanced across both colors.
-        A truncated game fails the run.
+        {neural ? (
+          `${td.games.toLocaleString("en")} self-play games. One sequential learner updates after every turn. Turn-limited games have no terminal result. Save a frozen snapshot to evaluate it independently.`
+        ) : (
+          <>
+            {(
+              cfg.population *
+              cfg.generations *
+              cfg.pairs_per_opponent *
+              4
+            ).toLocaleString("en")}{" "}
+            games planned against Heuristic and Random, balanced across both
+            colors. A truncated game fails the run.
+          </>
+        )}
       </p>
       {error && (
         <p className="alert" role="alert">
@@ -481,7 +566,7 @@ function JobDetail({
             <div>
               <p className="eyebrow">
                 {kind === "training"
-                  ? "GA-LINEAR"
+                  ? algorithmName(x).toUpperCase()
                   : "INDEPENDENT PAIRED MATCHES"}
               </p>
               <h1>{x.name}</h1>
@@ -497,12 +582,12 @@ function JobDetail({
           <div className="run-toolbar">
             <p className="muted">
               {x.state === "stopping"
-                ? "Finishing the current batch before saving the checkpoint…"
+                ? `Finishing the current ${x.td_config ? "game" : "batch"} before saving the checkpoint…`
                 : x.state === "queued"
                   ? "Waiting for the active job to finish. One job runs at a time."
                   : x.state === "completed"
                     ? "Completed. Results and checkpoint saved."
-                    : "Each completed batch is saved locally."}
+                    : `Each completed ${x.td_config ? "game" : "batch"} is saved locally.`}
             </p>
             <div className="actions">
               {active(x) && (
@@ -543,14 +628,21 @@ function JobDetail({
             </div>
             {kind === "training" && (
               <div>
-                <small>Generations</small>
+                <small>
+                  {x.td_config ? "Game checkpoints" : "Generations"}
+                </small>
                 <strong>
-                  {x.generation} / {x.config?.generations ?? x.generation_budget}
+                  {x.generation} /{" "}
+                  {x.config?.generations ?? x.generation_budget}
                 </strong>
                 <span>
                   {x.state === "completed"
-                    ? "All generations evaluated"
-                    : `${x.generation_games} / ${x.generation_budget} games in current generation`}
+                    ? x.td_config
+                      ? "All game boundaries saved"
+                      : "All generations evaluated"
+                    : x.td_config
+                      ? "Saved after each game"
+                      : `${x.generation_games} / ${x.generation_budget} games in current generation`}
                 </span>
               </div>
             )}
@@ -558,7 +650,7 @@ function JobDetail({
               <small>Decisions</small>
               <strong>{x.counters.decisions.toLocaleString("en")}</strong>
               <span>
-                {x.counters.forward_evaluations.toLocaleString("en")} linear
+                {x.counters.forward_evaluations.toLocaleString("en")} forward
                 evaluations
               </span>
             </div>
@@ -567,11 +659,19 @@ function JobDetail({
               <strong>{x.wall_seconds.toFixed(1)}s</strong>
               <span>
                 {kind === "training"
-                  ? `${x.counters.mutations} mutations · ${x.counters.crossovers} crossovers`
+                  ? x.td_config
+                    ? "Sequential self-play"
+                    : `${x.counters.mutations} mutations · ${x.counters.crossovers} crossovers`
                   : `${x.generation_games} / ${x.generation_budget} games`}
               </span>
             </div>
           </div>
+          {x.td_config && (
+            <p className="notice" data-updates={x.counters.updates ?? 0}>
+              {(x.counters.updates ?? 0).toLocaleString("en")} TD updates · One
+              update per full turn
+            </p>
+          )}
           <progress
             aria-label="Run progress"
             value={kind === "training" ? x.counters.games : x.generation_games}
@@ -584,14 +684,26 @@ function JobDetail({
           {kind === "training" ? (
             <>
               <TrainingGame job={x} />
-              <section className="lab-panel">
-                <div className="section-heading">
-                  <h2>Generation fitness</h2>
-                  <span className="tag">DEVELOPMENT GAMES</span>
-                </div>
-                <FitnessChart history={x.history} />
-              </section>
-              <Candidates x={x} refresh={refresh} />
+              {x.td_config ? (
+                <>
+                  <section className="lab-panel">
+                    <h2>TD learning error</h2>
+                    <TDChart history={x.td_history ?? []} />
+                  </section>
+                  <NeuralSnapshot x={x} refresh={refresh} />
+                </>
+              ) : (
+                <>
+                  <section className="lab-panel">
+                    <div className="section-heading">
+                      <h2>Generation fitness</h2>
+                      <span className="tag">DEVELOPMENT GAMES</span>
+                    </div>
+                    <FitnessChart history={x.history} />
+                  </section>
+                  <Candidates x={x} refresh={refresh} />
+                </>
+              )}
             </>
           ) : (
             <EvaluationResult x={x} />
@@ -599,7 +711,11 @@ function JobDetail({
           <details className="lab-panel">
             <summary>Run settings</summary>
             <pre>
-              {JSON.stringify(x.config ?? x.evaluation?.config, null, 2)}
+              {JSON.stringify(
+                x.config ?? x.td_config ?? x.evaluation?.config,
+                null,
+                2,
+              )}
             </pre>
             <p className="muted">Run ID: {x.id}</p>
           </details>
