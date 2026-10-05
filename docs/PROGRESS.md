@@ -10,8 +10,8 @@
 - [x] M1: Random/Heuristic, bounded simulations, replay, and CLI.
 - [x] Acceptance: gofmt, vet, unit/property/oracle tests, race, frontend checks, and smoke.
 
-**M0 and M1 are complete.** Checks were run against the final implementation
-of this iteration. The next milestone is M2; M2–M7 are not implemented yet.
+**M0 and M1 are complete.** The checks below describe that iteration. M2 is
+complete as recorded in its own section below; the next milestone is M3.
 
 Public test boundaries from the brief: ValidatePosition, LegalTurns, ApplyTurn,
 Result, LegalContinuations, agent action selection, simulation, and replay.
@@ -59,7 +59,7 @@ Benchmark fixtures are next to the game/features/arena tests; measurements
 apply to those inputs. CPU time was not measured and wall-clock time was not
 multiplied by worker count.
 
-## Iteration limitations
+## M0–M1 limitations at completion
 
 The frontend is a scaffold. HTTP/SSE, human play, the model library, and training
 are not implemented or presented as working. The UI is not embedded in the Go CLI.
@@ -77,7 +77,88 @@ request. Game rules, identifiers, and formats are unchanged. Frontend typecheck,
 Vitest, and production build passed. A scan
 of repository source files found no remaining Cyrillic text; the HTML locale is `en`.
 
-## Next iteration
+## M2 iteration — complete
 
-M2: server game sessions, HTTP/SSE, SVG board, command idempotency,
-session recovery, and an immutable model library.
+- [x] Atomic mutable session/metadata storage and immutable model publication.
+- [x] Built-in cards, saved linear/random snapshots, compatibility checks, and rename.
+- [x] Authoritative sessions, persistent dice/drafts, idempotent versioned commands.
+- [x] Local HTTP/SSE server, bounded requests, Host/Origin checks, and serve CLI.
+- [x] English browser UI: bot library, SVG board, legal moves, undo, confirmation, history.
+- [x] Acceptance: full human–Heuristic game, refresh/restart recovery, repeated commands,
+  backend tests/race, frontend tests/build, and browser end-to-end checks.
+
+Public test boundaries are model save/load and metadata, session commands and
+recovery, HTTP/SSE behavior, and the real browser flow. These are the M2 boundaries
+specified in the implementation brief. Training remains M3; M2 saves actual
+baseline parameters and does not label them as trained or evaluated models.
+
+### Implemented behavior
+
+The server owns opening dice, later rolls, full-turn validation, bot inference,
+drafts, versions, and durable command receipts. Confirmation includes the next
+bot turn in one transaction. Saved snapshots preserve model identity and choices;
+renames update metadata only. Failed validation/cancellation before commit do not
+persist changes. Finished histories reproduce without inference. The frontend
+uses engine-validated previews and continuations, supports keyboard selection,
+explicit ambiguous-die choices, undo/reset, history, and recent-game resume.
+The game ruleset and inference tie behavior are unchanged.
+
+`serve`, `bots list`, and `bots save` are available. `make dev` now starts the
+backend and Vite proxy; `make build` produces the CLI and separate frontend assets.
+Protocol, schemas, compatibility, persistence, and resource limits are documented
+in `docs/API.md`. AGENTS.md points to progress without caching a milestone number;
+it contains no language policy.
+
+### Actual M2 checks
+
+Final suite on Go 1.25.5 darwin/amd64, Node 23.11.0, npm 10.9.2:
+
+- `make test`: gofmt, vet, Go tests and race across all 11 packages, frontend
+  typecheck, 2 Vitest tests, and production build: pass.
+- Session tests complete human games against Heuristic for both White and Black,
+  validate replay/final hashes, recover after reopen, preserve dice and drafts,
+  reject stale/reused commands, handle concurrent retries exactly once, respect
+  cancellation, and prevent mutation through returned snapshots: pass.
+- Library tests preserve linear and random decisions, immutable identities and
+  models after rename/new publication; reject bad shapes/nonfinite weights and
+  corrupted checksums; keep unavailable cards visible: pass.
+- HTTP tests cover strict command fields, client-assigned dice rejection, stale
+  versions, body limits, Host/Origin rejection, metadata, and real-socket SSE: pass.
+- `make smoke`: this batch completed 12 baseline games with 1118 turns and produced
+  2 separately truncated games with null result metrics. All 42 accumulated smoke
+  replays (36 completed, 6 truncated) verified. Fixed-seed outcomes match M1.
+- `make build`: frontend assets and macOS CLI: pass.
+- `make e2e`: 2 real Chromium scenarios passed in 40.7 seconds. The full game uses
+  browser controls against Heuristic; the scenario saves/renames a snapshot,
+  refreshes, restarts the actual server, restores and undoes a draft, loses an
+  already-committed confirmation response and retries it once, finishes the game,
+  and downloads its replay. The second scenario plays a saved model as Black and
+  checks that another browser receives draft/turn updates over SSE.
+- Desktop and 390×844 screenshots were inspected; the narrow view has no horizontal
+  page overflow. Checker selection uses keyboard focus/Enter in browser tests.
+- Development launcher: library GET and versioned game POST through Vite with
+  its browser Origin succeed; shutdown stops both local servers: pass.
+- Updated Vite to 7.3.6 and Vitest to 4.1.11 after npm audit advisories. npm 10's
+  resolver crashed during the upgrade; a temporary npm 11.6.0 completed it without
+  changing global npm. Compatible transitive fixes and a clean npm 10 `ci` passed;
+  audit reported 0 vulnerabilities. Playwright is pinned to 1.57.0 in the lockfile.
+- Node 23 is outside Vitest's declared engine range and produces an npm warning;
+  the checks above passed on it. README recommends supported LTS versions.
+- Repository source/documentation scan found no Cyrillic text; `git diff --check`
+  passed. No long training or publication was run.
+
+`make bench`, same machine and 200ms samples; these are measurements, not promises:
+
+| Check | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| LegalTurns, midgame fixture, 3–3 | 289227 | 272312 | 467 |
+| HeuristicScore, opening position | 255.9 | 0 | 0 |
+| Simulation, seed 42, 1 Heuristic–Random game | 16558833 | 14370787 | 31406 |
+
+### Remaining work
+
+M3 is next: real GA-linear training, bounded jobs, checkpoint/resume, manual
+candidate saves, and independent evaluation. No training/evaluation API or fake
+statistics are exposed in M2. Timeline playback, model import/export, neural
+inference, and release embedding remain later milestones. Linux execution and
+non-Chromium browsers were not tested in M2; storage still requires Unix flock.

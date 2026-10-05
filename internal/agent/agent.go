@@ -33,7 +33,14 @@ func (r *Random) Choose(ctx context.Context, p game.Position, _ game.Dice, actio
 
 type Heuristic struct{}
 
-func (Heuristic) Choose(ctx context.Context, p game.Position, _ game.Dice, actions []game.Action) (int, error) {
+func (Heuristic) Choose(ctx context.Context, p game.Position, dice game.Dice, actions []game.Action) (int, error) {
+	return (Linear{Weights: features.DefaultWeights}).Choose(ctx, p, dice, actions)
+}
+
+// Linear holds a value copy of frozen weights and never runs training.
+type Linear struct{ Weights features.Vector }
+
+func (l Linear) Choose(ctx context.Context, p game.Position, _ game.Dice, actions []game.Action) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -48,7 +55,7 @@ func (Heuristic) Choose(ctx context.Context, p game.Position, _ game.Dice, actio
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		value := features.Score(action.Next, features.DefaultWeights)
+		value := features.Score(action.Next, l.Weights)
 		if p.Turn == game.Black {
 			value = -value
 		}

@@ -1,12 +1,12 @@
 export GOCACHE ?= $(CURDIR)/.cache/go-build
 
-.PHONY: setup dev build test smoke bench fmt
+.PHONY: setup dev build test smoke bench fmt e2e
 
 setup:
 	cd web && npm ci --cache ../.cache/npm --no-fund
 
 dev:
-	cd web && npm run dev
+	bash scripts/dev.sh
 
 build:
 	cd web && npm run build
@@ -26,6 +26,9 @@ smoke:
 
 bench:
 	go test ./internal/game ./internal/features ./internal/arena -run '^$$' -bench . -benchmem -benchtime=200ms
+
+e2e: build
+	cd web && npm run e2e
 
 fmt:
 	gofmt -w cmd internal

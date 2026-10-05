@@ -306,6 +306,25 @@ func LegalContinuations(p Position, dice Dice, prefix []Step) (Continuations, er
 	return result, nil
 }
 
+// PreviewTurn returns a validated draft board without advancing the full-turn
+// metadata. Legality still comes from complete paths, not a frontend step engine.
+func PreviewTurn(p Position, dice Dice, prefix []Step) (Position, Continuations, error) {
+	options, err := LegalContinuations(p, dice, prefix)
+	if err != nil {
+		return p, options, err
+	}
+	q := p
+	for _, step := range prefix {
+		q.Checkers[p.Turn][step.From]--
+		if step.To == Off {
+			q.BorneOff[p.Turn]++
+		} else {
+			q.Checkers[p.Turn][step.To]++
+		}
+	}
+	return q, options, nil
+}
+
 func compareSteps(a, b Step) int {
 	if a.From != b.From {
 		return a.From - b.From
