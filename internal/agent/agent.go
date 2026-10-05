@@ -37,23 +37,32 @@ func (Heuristic) Choose(ctx context.Context, p game.Position, dice game.Dice, ac
 	return (Linear{Weights: features.DefaultWeights}).Choose(ctx, p, dice, actions)
 }
 
+func (Heuristic) ChooseMeasured(ctx context.Context, p game.Position, dice game.Dice, actions []game.Action) (int, int, error) {
+	return (Linear{Weights: features.DefaultWeights}).ChooseMeasured(ctx, p, dice, actions)
+}
+
 // Linear holds a value copy of frozen weights and never runs training.
 type Linear struct{ Weights features.Vector }
 
-func (l Linear) Choose(ctx context.Context, p game.Position, _ game.Dice, actions []game.Action) (int, error) {
+func (l Linear) Choose(ctx context.Context, p game.Position, dice game.Dice, actions []game.Action) (int, error) {
+	index, _, err := l.ChooseMeasured(ctx, p, dice, actions)
+	return index, err
+}
+
+func (l Linear) ChooseMeasured(ctx context.Context, p game.Position, _ game.Dice, actions []game.Action) (int, int, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if len(actions) == 0 {
-		return 0, fmt.Errorf("heuristic agent needs legal actions")
+		return 0, 0, fmt.Errorf("heuristic agent needs legal actions")
 	}
 	if index, ok := winning(p, actions); ok {
-		return index, nil
+		return index, 0, nil
 	}
 	best, score := 0, math.Inf(-1)
 	for i, action := range actions {
 		if err := ctx.Err(); err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		value := features.Score(action.Next, l.Weights)
 		if p.Turn == game.Black {
@@ -63,7 +72,7 @@ func (l Linear) Choose(ctx context.Context, p game.Position, _ game.Dice, action
 			best, score = i, value
 		}
 	}
-	return best, nil
+	return best, len(actions), nil
 }
 
 func winning(p game.Position, actions []game.Action) (int, bool) {

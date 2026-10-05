@@ -17,6 +17,7 @@ import (
 
 	"evonardy/internal/app"
 	"evonardy/internal/httpapi"
+	"evonardy/internal/jobs"
 	"evonardy/internal/library"
 	"evonardy/internal/storage"
 )
@@ -87,6 +88,12 @@ func serveCommand(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	bots := library.New(store)
+	manager, err := jobs.New(store, bots)
+	if err != nil {
+		return err
+	}
+	defer manager.Close()
+	config.Jobs = manager
 	service := app.New(store, bots, app.Options{})
 	server := &http.Server{Handler: httpapi.New(service, bots, config), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	if _, err := fmt.Fprintf(out, "EvoNardy listening at http://%s\n", address); err != nil {

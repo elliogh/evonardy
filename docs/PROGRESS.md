@@ -10,8 +10,8 @@
 - [x] M1: Random/Heuristic, bounded simulations, replay, and CLI.
 - [x] Acceptance: gofmt, vet, unit/property/oracle tests, race, frontend checks, and smoke.
 
-**M0 and M1 are complete.** The checks below describe that iteration. M2 is
-complete as recorded in its own section below; the next milestone is M3.
+**M0 through M3 are complete.** The checks below describe their respective
+iterations; the next milestone is M4.
 
 Public test boundaries from the brief: ValidatePosition, LegalTurns, ApplyTurn,
 Result, LegalContinuations, agent action selection, simulation, and replay.
@@ -162,3 +162,98 @@ candidate saves, and independent evaluation. No training/evaluation API or fake
 statistics are exposed in M2. Timeline playback, model import/export, neural
 inference, and release embedding remain later milestones. Linux execution and
 non-Chromium browsers were not tested in M2; storage still requires Unix flock.
+
+## M3 iteration — complete
+
+- [x] Frozen-policy arena matches with paired dice and measured work.
+- [x] GA-linear generations, balanced development games, independent random streams.
+- [x] Atomic checkpoints, bounded job queue, stop/resume, interruption recovery.
+- [x] Immutable candidate publication and independent frozen-model evaluation.
+- [x] Shared CLI/API lifecycle, SSE, training/evaluation UI, library results.
+- [x] Deterministic continuous/resumed runs, model integrity, full browser acceptance.
+- [x] Required test/smoke/build/bench checks and actual results.
+
+Public boundaries from M3 in the brief: generation training and fitness,
+checkpoint/resume, candidate save/load, independent evaluation, HTTP job commands,
+and real browser train → save → play. A truncated selection game fails the run;
+an incomplete generation never selects parents. Only bounded verification runs
+will be started by the implementation agent.
+
+### Implemented M3 behavior
+
+The pure GA evaluates whole paired games against fixed Heuristic/Random policies,
+then applies elitism, tournament selection, uniform crossover, and Gaussian
+mutation to the nine existing linear weights. Keyed random streams keep variation,
+dice, and agent choices independent. One durable job runs at a time with up to
+eight match workers. Batch checkpoints retain partial-generation work and support
+explicit stop/resume and crash recovery. Versioned generation archives allow
+manual publication during training without changing any saved model.
+
+`train`, `resume`, and `evaluate` share the server's job manager. HTTP exposes the
+same controls; small SSE revision notices are coalesced twice per second. The UI
+adds Training, saved-generation charts, candidate selection/publication, Evaluate,
+and links to actual independent results in My bots. User control versions are
+separate from background progress revisions. No game rules or inference ties
+changed. Protocol and reproducibility are documented in API.md and TRAINING.md.
+AGENTS.md was not changed.
+
+### Actual M3 checks
+
+Go 1.25.5 darwin/amd64, Node 23.11.0, npm 10.9.2, Chromium 143:
+
+- `make test`: gofmt, vet, Go tests and race across 13 packages; frontend typecheck,
+  4 Vitest tests, and production build: pass. The final additional early-publication
+  check also passed normal/race job tests. Frontend checks were repeated after
+  presentation refinements.
+- Completed matches validate their real replays and measured inference work.
+  Paired games preserve opening/per-side dice when policies or sides change.
+- GA tests match continuous vs serialized-prefix resume and workers=1/2 for actual
+  coefficients, histories, and counters. Incomplete/truncated generations never
+  receive fitness or select parents.
+- Job tests stop/reopen/resume, reconstruct an abrupt crash from an actual running
+  checkpoint, match the uninterrupted run, reject checksum corruption, publish
+  during an active run, and preserve that early model through subsequent training.
+  Loaded weights equal the chosen candidate; inference works after manager close.
+- Independent evaluation uses separate seed domains, freezes caller-owned config,
+  preserves published weights, matches workers=1/2, and rejects truncated aggregate
+  results. HTTP tests cover creation retry, stale versions, candidate save,
+  generation retrieval, kind isolation, evaluation, and small real-socket SSE.
+- `make smoke`: 12 baseline games completed in 1118 turns; 2 separate games
+  truncated at one turn. All 56 accumulated replays (48 completed, 8 truncated)
+  verified. The GA smoke completed 32 games across 2 generations, 2809 decisions,
+  61995 linear evaluations, 27 coefficient mutations, and 3 child crossovers.
+  The best candidate remained the initial baseline on this tiny schedule; other
+  coefficients evolved, and the browser published a candidate with changed weights.
+  The CLI saved/reloaded its selected candidate and completed 8 independent games:
+  6 wins, 4 mars wins, mean signed points 1.0. These small samples do not establish
+  playing strength or superiority of GA.
+- `make build`: frontend and macOS CLI: pass (also run by `make e2e`).
+- `make e2e`: all 3 actual Chromium scenarios passed in 1.4 minutes. M2 scenarios
+  still pass. M3 loses an already-committed training-create response and retries
+  the identical command, trains 32 games, publishes changed coefficients, completes
+  an independent 4-game batch, starts another 96-game run, opens a game against the
+  frozen model while training, stops/restarts/resumes the run, and finishes a real
+  browser game. Manifest and session snapshots survive restart unchanged.
+- Desktop and 390×844 training screenshots inspected; chart labels remain readable
+  and the narrow view has no horizontal page overflow.
+- Repository source/documentation contains no Cyrillic; `git diff --check`: pass.
+  No external service, long training, release publication, or dependency upgrade
+  was used. Prettier ran from a temporary pinned package; no dependency was added.
+
+`make bench`, same Intel Core i5-1038NG7 machine and 200ms samples, after the main
+suites finished; measurements, not promises:
+
+| Check | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| LegalTurns, midgame fixture, 3–3 | 243328 | 272308 | 467 |
+| HeuristicScore, opening position | 235.0 | 0 | 0 |
+| Simulation, seed 42, 1 Heuristic–Random game | 14600203 | 14370384 | 31408 |
+
+### Remaining work after M3
+
+M4 is next: the shared encoder/MLP and RL with TD(0), then TD(lambda). GA-MLP and
+Hybrid remain M5; paired statistical intervals and comparisons remain M6; release
+embedding and packaging remain M7. M3 has no automatic champion promotion or
+confidence intervals. Baseline simulation batches remain nonresumable; training
+and evaluation jobs are resumable. Archive cleanup is manual, storage requires
+Unix flock, and Linux execution/non-Chromium browsers remain untested.

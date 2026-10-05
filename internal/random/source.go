@@ -26,6 +26,9 @@ func New(seed uint64, label string, index uint64) *Source {
 	return &Source{pcg: pcg, rng: rand.New(pcg)}
 }
 
+func (s *Source) Uint64() uint64       { return s.rng.Uint64() }
+func (s *Source) NormFloat64() float64 { return s.rng.NormFloat64() }
+
 func (s *Source) IntN(n int) int                    { return s.rng.IntN(n) }
 func (s *Source) MarshalBinary() ([]byte, error)    { return s.pcg.MarshalBinary() }
 func (s *Source) UnmarshalBinary(data []byte) error { return s.pcg.UnmarshalBinary(data) }

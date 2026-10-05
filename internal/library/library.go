@@ -279,6 +279,23 @@ func (l *Library) Agent(id string, source agent.IntSource) (agent.Agent, error) 
 	return agent.Linear{Weights: weights}, nil
 }
 
+// Freeze validates a package and copies its inference data before a queued job.
+func (l *Library) Freeze(id string) (agent.Policy, error) {
+	if id == RandomID {
+		return agent.Policy{ID: id, Kind: "random"}, nil
+	}
+	if id == HeuristicID {
+		return agent.Policy{ID: id, Kind: "linear", Weights: features.DefaultWeights}, nil
+	}
+	m, model, _, err := l.load(id)
+	if err != nil {
+		return agent.Policy{}, err
+	}
+	p := agent.Policy{ID: id, Kind: m.Evaluator}
+	copy(p.Weights[:], model.Weights)
+	return p, p.Validate()
+}
+
 func (l *Library) publish(name string, model Model, kind, source, parent string) (Card, error) {
 	if err := validName(name); err != nil {
 		return Card{}, err
