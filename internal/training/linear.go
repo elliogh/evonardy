@@ -68,6 +68,7 @@ type Counters struct {
 	ForwardEvaluations uint64 `json:"forward_evaluations"`
 	Mutations          uint64 `json:"mutations"`
 	Crossovers         uint64 `json:"crossovers"`
+	Updates            uint64 `json:"updates,omitempty"`
 }
 type Stats struct {
 	Games    int     `json:"games"`
@@ -465,7 +466,7 @@ func Validate(s State) error {
 		decisions += uint64(r.Turns)
 		forwards += uint64(r.ForwardEvaluations)
 	}
-	if games != s.Counters.Games || completed != s.Counters.CompletedGames || truncated != s.Counters.TruncatedGames || decisions != s.Counters.Decisions || forwards != s.Counters.ForwardEvaluations {
+	if games != s.Counters.Games || completed != s.Counters.CompletedGames || truncated != s.Counters.TruncatedGames || decisions != s.Counters.Decisions || forwards != s.Counters.ForwardEvaluations || s.Counters.Updates != 0 {
 		return fmt.Errorf("checkpoint counters mismatch")
 	}
 	return nil
