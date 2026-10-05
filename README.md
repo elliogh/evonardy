@@ -138,10 +138,13 @@ M3 checks additionally train real coefficients, save/reload a candidate, run an
 independent evaluation, stop/resume after restart, and finish a game against the
 frozen bot while another run trains.
 
-Status and actual results: [docs/PROGRESS.md](docs/PROGRESS.md).
+Tasks and current status: [GitHub Issues](https://github.com/elliogh/evonardy/issues)
+and the [EvoNardy roadmap](https://github.com/users/elliogh/projects/1).
+Stages and acceptance criteria: [milestones](https://github.com/elliogh/evonardy/milestones).
+Contribution workflow: [docs/WORKFLOW.md](docs/WORKFLOW.md).
+Historical verification results: [docs/PROGRESS.md](docs/PROGRESS.md).
 API and persistence contracts: [docs/API.md](docs/API.md).
 Training and reproducibility: [docs/TRAINING.md](docs/TRAINING.md).
-Next milestone: M4, neural evaluator and RL.
 The full implementation brief is in `evonardy-codex-plan/EVONARDY_PLAN.md`.
 
 ## License

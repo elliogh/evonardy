@@ -7,8 +7,9 @@ replace another contributor's instructions automatically.
 
 The project is long nardy on Go with a local React/TypeScript UI. Priorities:
 correct play, training, immutable saved bots, and human play against loaded bots.
-The full brief is EVONARDY_PLAN.md; progress is docs/PROGRESS.md; game contracts
-are docs/RULES.md.
+The full brief is EVONARDY_PLAN.md; game contracts are docs/RULES.md. Read open
+issues and milestones in `https://github.com/elliogh/evonardy` before choosing
+work; use docs/WORKFLOW.md for task tracking and completion.
 
 ## Stable constraints
 
@@ -28,7 +29,8 @@ speed, Elo, or a Hybrid victory.
 ## Workflow
 
 Inspect the repository before changing it. Complete milestones in order and
-maintain PROGRESS.md. Add regression tests for fixed defects. Complete checks
+record actual checks and incomplete work in the linked issue or PR. Keep Project
+status current. Add regression tests for fixed defects. Complete checks
 before marking work done. Report missing tools and failed checks. Do not run
 large training jobs to verify the UI.
 
