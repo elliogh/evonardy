@@ -912,3 +912,122 @@ footer span {
     line-height: 1.7;
   }
 }
+
+.research-form textarea {
+  display: block;
+  width: 100%;
+  min-height: 18rem;
+  resize: vertical;
+  border: 1px solid #61796d;
+  border-radius: 8px;
+  padding: 12px;
+  font:
+    0.85rem/1.5 ui-monospace,
+    monospace;
+  background: #152b23;
+  color: #eee;
+}
+.research-form > label {
+  display: block;
+  margin: 1rem 0;
+}
+.research-form > label > input {
+  width: 100%;
+}
+.research-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.research-chart {
+  margin: 0;
+  padding: 1rem 0;
+  min-width: 0;
+}
+.research-chart figcaption {
+  font-weight: 650;
+  margin-bottom: 0.5rem;
+}
+.research-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.research-chart text {
+  font:
+    11px system-ui,
+    sans-serif;
+  fill: #adbcaa;
+}
+.research-chart .chart-grid {
+  stroke: #71857450;
+}
+.research-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+.research-legend span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.research-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.research-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+.research-table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.85rem;
+}
+.research-table caption {
+  text-align: left;
+  font-weight: 650;
+  margin-bottom: 0.75rem;
+}
+.research-table th,
+.research-table td {
+  padding: 0.6rem;
+  border-bottom: 1px solid #71857450;
+  white-space: nowrap;
+}
+.research-results {
+  margin: 2.5rem 0;
+}
+.research-id {
+  overflow-wrap: anywhere;
+}
+.research-results + section {
+  overflow-wrap: anywhere;
+}
+.lab-form pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.lab-form summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.lab-form progress {
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .research-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .research-form .section-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

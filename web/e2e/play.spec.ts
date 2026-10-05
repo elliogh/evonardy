@@ -1063,3 +1063,159 @@ for (const method of ["ga-mlp", "hybrid"] as const) {
     expect(errors).toEqual([]);
   });
 }
+
+test("research records every seed, plots measured budgets and preserves final confirmation after restart", async ({
+  page,
+}, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/#/research");
+  await expect(
+    page.getByRole("heading", { name: "Compare the evidence." }),
+  ).toBeVisible();
+  const config = page.getByRole("textbox", {
+    name: "Full experiment configuration",
+  });
+  await expect(config).toHaveValue(/"training_seeds"/);
+  const defaults = JSON.parse(await config.inputValue());
+  expect(defaults.training_seeds).toHaveLength(5);
+  await page
+    .getByRole("button", { name: "Use research smoke preset", exact: true })
+    .click();
+  const bounded = JSON.parse(await config.inputValue());
+  expect(bounded.training_seeds).toEqual([11, 12]);
+  // This real scenario verifies all five independent seeds at bounded per-seed
+  // budgets; ordinary smoke remains the smaller two-seed lifecycle check.
+  bounded.training_seeds = [11, 12, 13, 14, 15];
+  await config.fill(JSON.stringify(bounded, null, 2));
+  await page
+    .getByRole("textbox", { name: "Experiment name", exact: true })
+    .fill("Five-seed research");
+  await page
+    .getByRole("button", { name: "Start experiment", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/research\//);
+  const id = page.url().split("/research/")[1];
+  const experiment = async () =>
+    await (await page.request.get(`/api/experiments/${id}`)).json();
+  await expect(page.getByTestId("research-state")).toHaveText("completed", {
+    timeout: 90000,
+  });
+  const x = await experiment();
+  expect(x.runs).toHaveLength(15);
+  expect(x.methods).toHaveLength(3);
+  expect(x.differences).toHaveLength(3);
+  expect(x.counters.games).toBe(319);
+  expect(x.selection_locked).toBe(true);
+  expect(x.verdict.status).toBe("candidate");
+  await expect(page.getByTestId("research-verdict")).toContainText(
+    "Candidate retained",
+  );
+  await expect(page.getByRole("img")).toHaveCount(2);
+  for (const run of x.runs) {
+    const dots = page.locator(
+      `.research-chart g[data-seed="${run.seed}"][data-algorithm="${run.algorithm}"]`,
+    );
+    await expect(dots).toHaveCount(2);
+    expect(Number(await dots.nth(0).getAttribute("data-budget"))).toBe(
+      run.counters.decisions,
+    );
+    expect(Number(await dots.nth(1).getAttribute("data-budget"))).toBe(
+      run.wall_seconds,
+    );
+  }
+  const reportResponse = await page.request.get(
+    `/api/experiments/${id}/report`,
+  );
+  expect(reportResponse.ok()).toBe(true);
+  const reportBytes = await reportResponse.body();
+  const { createHash } = await import("node:crypto");
+  expect(createHash("sha256").update(reportBytes).digest("hex")).toBe(
+    x.report_sha256,
+  );
+  const report = JSON.parse(reportBytes.toString());
+  expect(report.runs).toEqual(x.runs);
+  expect(report.final_scores).toEqual(x.final_scores);
+  await page.screenshot({
+    path: info.outputPath("research-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: info.outputPath("research-mobile.png"),
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await stop();
+  await start();
+  await page.reload();
+  await expect(page.getByTestId("research-state")).toHaveText("completed");
+  const after = await experiment();
+  expect(after.candidate_id).toBe(x.candidate_id);
+  expect(after.counters).toEqual(x.counters);
+  expect(after.report_sha256).toBe(x.report_sha256);
+  expect(after.verdict).toEqual(x.verdict);
+  const repeat = await page.request.post(`/api/experiments/${id}/resume`, {
+    data: { command_id: "repeat-final", expected_version: after.version },
+  });
+  expect(repeat.status()).toBe(409);
+  await page
+    .getByRole("link", { name: "Evaluate saved candidate", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/evaluations\?bot=/);
+  await page.getByRole("link", { name: "Research", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Use research smoke preset", exact: true })
+    .click();
+  const nextConfig = JSON.parse(await config.inputValue());
+  nextConfig.methods = nextConfig.methods.filter(
+    (m: { algorithm: string }) => m.algorithm === "td-lambda",
+  );
+  nextConfig.methods[0].td.games = 32;
+  nextConfig.methods[0].td.max_turns = 50;
+  await config.fill(JSON.stringify(nextConfig, null, 2));
+  await page
+    .getByRole("textbox", { name: "Experiment name", exact: true })
+    .fill("Research resume and final-data reuse");
+  await page
+    .getByRole("button", { name: "Start experiment", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/research\//);
+  const resumedID = page.url().split("/research/")[1];
+  const resumeSnapshot = async () =>
+    await (await page.request.get(`/api/experiments/${resumedID}`)).json();
+  await expect
+    .poll(async () => (await resumeSnapshot()).counters.games)
+    .toBeGreaterThan(0);
+  await page
+    .getByRole("button", { name: "Stop experiment", exact: true })
+    .click();
+  await expect(page.getByTestId("research-state")).toHaveText("stopped");
+  const stopped = await resumeSnapshot();
+  expect(stopped.can_resume).toBe(true);
+  await stop();
+  await start();
+  await page.reload();
+  await expect(page.getByTestId("research-state")).toHaveText("stopped");
+  await page
+    .getByRole("button", { name: "Resume experiment", exact: true })
+    .click();
+  await expect(page.getByTestId("research-state")).toHaveText("completed", {
+    timeout: 90000,
+  });
+  const resumed = await resumeSnapshot();
+  expect(resumed.counters.games).toBe(72);
+  expect(resumed.counters.decisions).toBeGreaterThan(
+    stopped.counters.decisions,
+  );
+  expect(resumed.final_data_role).toBe("reused-development");
+  expect(resumed.verdict.status).toBe("candidate");
+  await expect(page.getByTestId("research-verdict")).toContainText(
+    "previously reserved",
+  );
+  expect(errors).toEqual([]);
+});

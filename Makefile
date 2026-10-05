@@ -24,6 +24,7 @@ smoke:
 	go run ./cmd/evonardy simulate --config configs/truncation-smoke.json --data-dir .cache/smoke
 	go run ./cmd/evonardy replay --dir .cache/smoke/replays
 	bash scripts/smoke-training.sh
+	bash scripts/smoke-research.sh
 
 bench:
 	go test ./internal/game ./internal/features ./internal/arena -run '^$$' -bench . -benchmem -benchtime=200ms

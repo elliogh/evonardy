@@ -37,9 +37,12 @@ func (s *server) researchRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("GET /api/experiments/{id}/report", func(w http.ResponseWriter, r *http.Request) {
 		data, err := m.Report(r.PathValue("id"))
-		if err == nil {
-			w.Header().Set("Content-Disposition", "attachment; filename=research-report.json")
+		if err != nil {
+			respond(w, nil, err)
+			return
 		}
-		respond(w, data, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", "attachment; filename=research-report.json")
+		_, _ = w.Write(data)
 	})
 }

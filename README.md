@@ -3,9 +3,10 @@
 [![CI](https://github.com/elliogh/evonardy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/elliogh/evonardy/actions/workflows/ci.yml)
 
 A local open-source **long nardy (long backgammon)** project with a Go backend
-and a React/TypeScript UI. M0–M5 implements the game engine, Random/Heuristic
+and a React/TypeScript UI. M0–M6 implements the game engine, Random/Heuristic
 agents, verifiable replays, browser play, a persistent bot library, and real
-GA-linear, GA-MLP, neural TD(0)/TD(lambda), and synchronous Hybrid training with checkpoint/resume and independent evaluation.
+GA-linear, GA-MLP, neural TD(0)/TD(lambda), and synchronous Hybrid training with checkpoint/resume and independent evaluation. Research mode adds auditable
+multi-seed comparisons, paired uncertainty and separate held-out confirmation.
 
 The UI and all repository content are maintained in English.
 
@@ -166,7 +167,38 @@ complete game against the saved neural model. Watching or playing leaves learner
 streams and published weights unchanged. M5 adds two population scenarios: archived
 GA-MLP/Hybrid candidate saves, lineage and replacement inspection, restart, independent
 evaluation, stopped/resumed learning, and immutable neural play. The suite contains
-eight real browser scenarios.
+nine real browser scenarios. M6 adds a real five-seed, three-method experiment,
+checks every plotted budget against the server, downloads and hashes the immutable
+report, and verifies the selected candidate and final verdict after restart.
+
+## Research mode
+
+Open **Research** in the browser. Review the full configuration, including five
+independent training seeds, method budgets, frozen opponents, development/final
+seeds and the predeclared confirmation criterion. **Use research smoke preset**
+runs a small two-seed experiment; its final batch deliberately cannot confirm a
+champion. Edit the full JSON for larger experiments, then choose **Start experiment**.
+Stop/resume preserves the committed games and selection lock.
+
+The results show every seed against measured decisions and trainer/selection time,
+all-seed method intervals, paired method differences and separate final evidence.
+Each model is saved in **My bots** for independent evaluation and play. Download the
+immutable JSON report to audit exact configs, model manifests, raw schedules,
+results, measured counters and version/platform/build metadata. A reused final
+schedule is labeled development data and cannot supply independent confirmation.
+
+```bash
+go run ./cmd/evonardy experiment --config configs/research-smoke.json \
+  --name "Bounded comparison" --data-dir .cache/research
+# Resume the saved configuration after stopping; use the ID from the JSON output.
+go run ./cmd/evonardy experiment-resume --experiment EXPERIMENT_ID \
+  --data-dir .cache/research
+```
+
+`make smoke` includes this bounded lifecycle; long training remains outside CI.
+The default is a starting protocol, not a recommendation about sufficient playing
+strength. Read [research contracts](docs/RESEARCH.md) before interpreting intervals,
+comparing compute budgets or confirming a champion.
 
 Tasks and current status: [GitHub Issues](https://github.com/elliogh/evonardy/issues)
 and the [EvoNardy roadmap](https://github.com/users/elliogh/projects/1).

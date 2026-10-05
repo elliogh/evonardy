@@ -52,6 +52,9 @@ initialization scale must be one, matching TD and Hybrid. Algorithm-specific
 hyperparameters remain explicit: this does not make equal game counts equal
 compute budgets.
 
+Population fitness selection uses the versioned built-in Heuristic and Random
+policies. Configured `opponent_ids` apply to post-training development evaluation.
+
 Each complete seed run publishes an immutable inference model, records its exact
 manifest, then evaluates it against the opponents frozen at experiment creation.
 Development schedules are shared across methods and distinct across training-seed

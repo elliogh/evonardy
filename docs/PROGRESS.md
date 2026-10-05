@@ -352,3 +352,32 @@ Hybrid completed 16 training plus 64 selection games and 1469 TD updates. Both
 published immutable neural models and completed separate eight-game evaluations.
 Desktop/390px screenshots were inspected without horizontal overflow. Smoke proves
 execution and persistence, not playing strength; systematic comparisons remain M6.
+
+## M6 verification
+
+Task tracking remains in [M6 #15](https://github.com/elliogh/evonardy/issues/15)
+and implementation issues #42–#44. `make test`, `make smoke`, `make build` and
+`make bench` passed on Go 1.25.5 macOS/amd64. The first smoke attempt encountered an
+unpublished pre-final-M5 Hybrid checkpoint (zero completed-round progress); the
+old ignored training directory was preserved separately, and fresh bounded smoke
+passed. Baseline verification checked 238 accumulated replays (204 complete,
+34 truncated). Research smoke completed six seed runs across three methods, with
+130 complete physical games, 12111 decisions, 210543 forward evaluations and
+1615 updates. Its separate four-game final batch retained candidate status.
+
+`make e2e` passed all nine actual Chromium scenarios with one worker and no retries
+in 3.4 minutes. Research executed fifteen seed runs on five seeds, charged 319
+physical games, matched every plotted budget to server records, verified downloaded
+report bytes against SHA-256, preserved candidate/counters/verdict after restart,
+and tested stopped/resumed learning plus disclosed final-data reuse. The first
+focused browser check found JSON reformatting in the download route; the corrected
+route returns exact immutable bytes, covered by HTTP and real-browser checks.
+Desktop and 390px screenshots were inspected; charts use actual samples and tables
+scroll within the viewport. Frontend checks/build passed after adding explicit
+comparison game counts. No long training or playing-strength assertion was run.
+
+The final bounded benchmark samples measured LegalTurns at 259658 ns/op,
+HeuristicScore at 222.5 ns/op, and Simulation at 14679032 ns/op on the Intel
+Core i5-1038NG7; these are observations, not performance promises. Rules and model
+contracts, AGENTS.md and dependencies were unchanged. Release packaging and
+position analysis remain M7.
