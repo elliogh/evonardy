@@ -193,7 +193,7 @@ zero-based game index within the generation, candidate/opponent IDs, candidate
 color, turn count, and status. It identifies one actual evaluated match from the
 most recently committed worker batch. No additional exhibition game is created.
 
-For neural self-play, `generation` is the committed game number and `game_index`
+For neural self-play, `generation` is the committed game number and `index`
 is its zero-based index in the run. Both replay participant IDs are
 `<algorithm>/self-play`: this is the live sequential learner for both colors,
 not a match between frozen candidates. The recorded outcome/turn count agrees
