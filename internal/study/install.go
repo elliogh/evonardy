@@ -37,8 +37,29 @@ func Install(source, destination *storage.Store, s State) error {
 			}
 			files[name] = data
 		}
-		if err := destination.PublishNew(filepath.Join("bots", id), files); err != nil && !os.IsExist(err) {
-			return err
+		publishErr := destination.PublishNew(filepath.Join("bots", id), files)
+		if publishErr != nil && !os.IsExist(publishErr) {
+			return publishErr
+		}
+		if publishErr == nil && id != s.IncumbentID {
+			bots := library.New(destination)
+			card, err := bots.Get(id)
+			if err != nil {
+				return err
+			}
+			label := "Candidate"
+			if id == s.SelectedID {
+				label = "Confirmed"
+			}
+			// Names are mutable metadata; published inference bytes stay intact.
+			name := card.Name
+			if len(name) > 100 {
+				name = id[:16]
+			}
+			_, err = bots.Rename(id, library.RenameRequest{Command: library.Command{CommandID: digest([]byte(s.ID + "/install/" + id + "/" + label))[:32], ExpectedVersion: card.MetadataVersion}, Name: label + " — " + name})
+			if err != nil {
+				return err
+			}
 		}
 		if _, err := library.New(destination).Freeze(id); err != nil {
 			return err

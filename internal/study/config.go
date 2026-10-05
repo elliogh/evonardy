@@ -136,12 +136,18 @@ func (c Config) Validate() error {
 		return fmt.Errorf("development cohort exceeds statistics capacity")
 	}
 	finalists := int64(len(c.Methods) + 2)
+	if int64(len(c.Methods)*len(c.Seeds)*3)+finalists*(finalists-1)/2+1 > 200 {
+		return fmt.Errorf("study exceeds 200 durable jobs")
+	}
 	evalGames := int64(len(c.Methods)*len(c.Seeds)*(c.DevelopmentPairs*4+c.RandomPairs*2)) + finalists*(finalists-1)*int64(c.TournamentPairs) + int64(c.Confirmation.Pairs*2)
 	if games+evalGames > 200000 || turns+evalGames*int64(c.MaxTurns) > 200000000 {
 		return fmt.Errorf("study exceeds 200000 physical games or 200000000 turn slots")
 	}
 	if err := c.Bootstrap.Validate(); err != nil {
 		return err
+	}
+	if int64(len(c.Seeds))*int64(c.DevelopmentPairs)*2*int64(c.Bootstrap.Resamples) > 20000000 {
+		return fmt.Errorf("development bootstrap exceeds 20000000 pair draws")
 	}
 	return c.Confirmation.Validate()
 }

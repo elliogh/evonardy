@@ -123,11 +123,58 @@ func TestFiveMethodsSelectionAndCompletedResume(t *testing.T) {
 	if _, err = library.New(destination).Freeze(x.SelectedID); err != nil {
 		t.Fatal("missing installed incumbent", err)
 	}
+	if x.BestNewID != "" && x.BestNewID != x.SelectedID {
+		card, err := library.New(destination).Get(x.BestNewID)
+		if err != nil || !strings.HasPrefix(card.Name, "Candidate — ") {
+			t.Fatal("missing candidate classification", err)
+		}
+		for _, name := range []string{"manifest.json", "model.json"} {
+			path := "bots/" + x.BestNewID + "/" + name
+			before, _ := s.Read(path, 1<<20)
+			after, _ := destination.Read(path, 1<<20)
+			if !bytes.Equal(before, after) {
+				t.Fatal("installation changed immutable package")
+			}
+		}
+		card.Card, err = library.New(destination).Rename(card.ID, library.RenameRequest{Command: library.Command{CommandID: "user-rename", ExpectedVersion: card.MetadataVersion}, Name: "My candidate"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = Install(s, destination, x); err != nil {
+			t.Fatal(err)
+		}
+		card, _ = library.New(destination).Get(x.BestNewID)
+		if card.Name != "My candidate" {
+			t.Fatal("reinstallation overwrote user metadata")
+		}
+	}
 	bad := x
 	bad.SelectedID = library.RandomID
 	bad.Verdict = nil
 	if Install(s, destination, bad) == nil {
 		t.Fatal("installed unconfirmed replacement")
+	}
+}
+
+func TestAdmissionAndConfiguredReport(t *testing.T) {
+	c := smallConfig()
+	c.Seeds = make([]uint64, 20)
+	for i := range c.Seeds {
+		c.Seeds[i] = uint64(i + 1)
+	}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "durable jobs") {
+		t.Fatal("accepted protocol above job capacity", err)
+	}
+	c.Methods = c.Methods[2:3]
+	c.DevelopmentPairs, c.Bootstrap.Resamples = 250, 10000
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "pair draws") {
+		t.Fatal("accepted over-capacity bootstrap", err)
+	}
+	c = smallConfig()
+	c.Bootstrap.Confidence, c.Confirmation.Bootstrap.Confidence = .9, .8
+	report := markdown(State{Config: c})
+	if !strings.Contains(report, "90% win interval") || !strings.Contains(report, "80% bootstrap") || strings.Contains(report, "95%") || !strings.Contains(report, "Incomplete or not started: td-lambda seed 1002") {
+		t.Fatal("report misrepresented custom protocol or missing seeds")
 	}
 }
 

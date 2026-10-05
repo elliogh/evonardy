@@ -211,6 +211,10 @@ func Execute(ctx context.Context, store *storage.Store, incumbent string, cfg Co
 	if r.s.Status == "completed" {
 		return r.s, r.report()
 	}
+	r.s.Status, r.s.Reason = "running", ""
+	if err = r.persist(); err != nil {
+		return r.s, err
+	}
 	deadline := r.s.StartedAt.Add(cfg.duration())
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()

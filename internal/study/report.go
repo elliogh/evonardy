@@ -10,16 +10,18 @@ import (
 
 func markdown(s State) string {
 	var b strings.Builder
+	confidence := s.Config.Bootstrap.Confidence * 100
+	finalConfidence := s.Config.Confirmation.Bootstrap.Confidence * 100
 	fmt.Fprintf(&b, "# Local strength study\n\nStudy `%s` — **%s** (%s).\n\n", s.ID, s.Status, s.Phase)
 	fmt.Fprintf(&b, "Started: %s. Updated: %s. Limit: %d seconds, including persistence and evaluation.\n\nExecution: %s, %s, revision `%s` (modified: %t).\n\n", s.StartedAt.Format("2006-01-02T15:04:05Z07:00"), s.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), s.Config.TimeLimitSeconds, s.Platform, s.GoVersion, s.Revision, s.Modified)
 	fmt.Fprintf(&b, "Selected policy: `%s`. Best newly trained candidate: `%s`.\n\n%s\n\n", s.SelectedID, s.BestNewID, s.Reason)
-	b.WriteString("## Protocol\n\nDevelopment ranks policies by equal-weight win rate against the frozen incumbent and Heuristic. Random is a separate diagnostic. Each observation is a White/Black pair sharing dice randomness. Training seeds and stage-specific dice roots, exact configs, manifests and raw evaluation scores are retained in `report.json` and durable job checkpoints. The study ID domain-separates the recorded schedules.\n\nThe tournament is development data. One candidate is locked before one final batch against the incumbent. A replacement requires a nondegenerate 95% bootstrap lower bound above the predeclared margin. Final results are never used to pick another candidate. This is evidence about tested opponents, not universal playing strength.\n\n")
-	b.WriteString("## Independent training cohorts\n\nOnly complete declared seed cohorts receive aggregate method estimates. Bootstrap intervals describe uncertainty; a small cohort does not guarantee nominal coverage.\n\n| Method | Seeds | Win rate | 95% win interval | Mean points |\n|---|---:|---:|---:|---:|\n")
+	fmt.Fprintf(&b, "## Protocol\n\nDevelopment ranks policies by equal-weight win rate against the frozen incumbent and Heuristic. Random is a separate diagnostic. Each observation is a White/Black pair sharing dice randomness. Training seeds and stage-specific dice roots, exact configs, manifests and raw evaluation scores are retained in `report.json` and durable job checkpoints. The study ID domain-separates the recorded schedules.\n\nThe tournament is development data. One candidate is locked before one final batch against the incumbent. A replacement requires a nondegenerate %.0f%% bootstrap lower bound above the predeclared margin. Final results are never used to pick another candidate. This is evidence about tested opponents, not universal playing strength.\n\n", finalConfidence)
+	fmt.Fprintf(&b, "## Independent training cohorts\n\nOnly complete declared seed cohorts receive aggregate method estimates. Bootstrap intervals describe uncertainty; a small cohort does not guarantee nominal coverage.\n\n| Method | Seeds | Win rate | %.0f%% win interval | Mean points |\n|---|---:|---:|---:|---:|\n", confidence)
 	for _, m := range s.Methods {
 		e := m.Estimate
 		fmt.Fprintf(&b, "| %s | %d | %.1f%% | %.1f–%.1f%% | %.3f |\n", m.Algorithm, e.TrainingSeeds, e.WinRate*100, e.WinInterval.Low*100, e.WinInterval.High*100, e.MeanPoints)
 	}
-	b.WriteString("\n| Method A | Method B | A − B (percentage points) | 95% interval |\n|---|---|---:|---:|\n")
+	fmt.Fprintf(&b, "\n| Method A | Method B | A − B (percentage points) | %.0f%% interval |\n|---|---|---:|---:|\n", confidence)
 	for _, d := range s.Differences {
 		fmt.Fprintf(&b, "| %s | %s | %.1f | %.1f–%.1f |\n", d.A, d.B, d.Estimate.WinRate*100, d.Estimate.WinInterval.Low*100, d.Estimate.WinInterval.High*100)
 	}
@@ -36,7 +38,7 @@ func markdown(s State) string {
 		}
 		fmt.Fprintf(&b, "| `%s` | %d | %d | %.1f%% | %d |\n", s.BotID, s.Games, s.Wins, rate*100, s.Points)
 	}
-	b.WriteString("\n| A | B | A win rate | 95% interval | Mean points |\n|---|---|---:|---:|---:|\n")
+	fmt.Fprintf(&b, "\n| A | B | A win rate | %.0f%% interval | Mean points |\n|---|---|---:|---:|---:|\n", confidence)
 	for _, m := range s.Matches {
 		fmt.Fprintf(&b, "| `%s` | `%s` | %.1f%% | %.1f–%.1f%% | %.3f |\n", m.A, m.B, m.Estimate.WinRate*100, m.Estimate.WinInterval.Low*100, m.Estimate.WinInterval.High*100, m.Estimate.MeanPoints)
 	}
@@ -61,6 +63,20 @@ func markdown(s State) string {
 		seconds += w.WallSeconds
 	}
 	fmt.Fprintf(&b, "\n## Actual work\n\n%d physical games: %d complete, %d truncated; %d decisions, %d forward evaluations, %d updates, %d mutations and %d crossovers. Measured trainer/evaluator calls: %.2f seconds; this excludes persistence, queue time and reporting. Equal game budgets do not imply equal compute.\n\nCompleted training runs: %d of %d declared. Every durable job, including interrupted work, is listed in the JSON report.\n", counters.Games, counters.CompletedGames, counters.TruncatedGames, counters.Decisions, counters.ForwardEvaluations, counters.Updates, counters.Mutations, counters.Crossovers, seconds, len(s.Runs), len(s.Config.Seeds)*len(s.Config.Methods))
+	for _, method := range s.Config.Methods {
+		for _, seed := range s.Config.Seeds {
+			found := false
+			for _, run := range s.Runs {
+				if run.Method == method.Name && run.Seed == seed {
+					found = true
+					break
+				}
+			}
+			if !found {
+				fmt.Fprintf(&b, "\nIncomplete or not started: %s seed %d. See job evidence and the recorded cutoff/status; no aggregate estimate is assigned to an incomplete cohort.\n", method.Name, seed)
+			}
+		}
+	}
 	b.WriteString("\n## Methodology sources\n\n- [Deep RL at the Edge of the Statistical Precipice](https://proceedings.neurips.cc/paper/2021/file/f514cec81cb148559cf475e7426eed5e-Paper.pdf): report independent runs and uncertainty rather than a best seed alone.\n- [Cawley and Talbot, JMLR 2010](https://www.jmlr.org/papers/v11/cawley10a.html): keep model selection separate from final performance evaluation.\n- [Tesauro, 1995](https://bkgm.com/articles/tesauro/tdl.html): self-play TD results concern short backgammon; they do not establish the strength of these long-nardy policies.\n")
 	return b.String()
 }

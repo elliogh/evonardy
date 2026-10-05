@@ -36,6 +36,9 @@ func run(ctx context.Context, args []string) error {
 	printConfig := f.Bool("print-config", false, "print the default protocol and exit")
 	installTo := f.String("install-to", "", "install selected completed results into an exclusively owned application directory")
 	if err := f.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if f.NArg() != 0 {

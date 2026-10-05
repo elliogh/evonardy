@@ -381,3 +381,36 @@ HeuristicScore at 222.5 ns/op, and Simulation at 14679032 ns/op on the Intel
 Core i5-1038NG7; these are observations, not performance promises. Rules and model
 contracts, AGENTS.md and dependencies were unchanged. Release packaging and
 position analysis remain M7.
+
+## Local five-method strength study — October 2026
+
+Tracking: [#48](https://github.com/elliogh/evonardy/issues/48),
+[PR #49](https://github.com/elliogh/evonardy/pull/49). Actual findings and provenance
+are in [STRENGTH_STUDY.md](STRENGTH_STUDY.md). Archived all 18 old test models and
+related history in a complete local backup: 11199 files, 469588872 payload bytes,
+SHA-256 checked before and after relocation. The original campaign executable and
+reports remain preserved; no models, raw scores or backups are committed.
+
+The campaign completed in 112.7 minutes under its original two-hour limit:
+24/25 declared training runs, all 21 league matches, 109704 completed physical
+games and zero truncations. TD(lambda) seed 1005 was not admitted after the
+105-minute cutoff; its partial cohort has no aggregate estimate. ev1 won the
+league (916/1200), so no self-confirmation was run and no replacement was promoted.
+The best new GA-linear seed 1001 (868/1200) is installed separately as Candidate.
+Both live packages match the immutable source manifest/model bytes; the original
+JSON evidence is unchanged. The restarted application's API exposes exactly the
+four expected policies: Random, Heuristic, ev1 and Candidate.
+
+After final audit fixes, `make test`, `make smoke`, `make build` and `make bench`
+passed on Go 1.25.5 macOS/amd64 and Node 23.11.0. Full race includes the real study
+integration suite (62.5 seconds); six frontend tests passed. Checks cover all five
+methods, committed-job recovery, completed/interrupted resume, original deadlines,
+selection locks, truncation and corruption rejection, job/bootstrap capacity,
+configured confidence labels and package installation preserving user renames.
+Fresh bounded smoke retained candidate status; smoke is execution evidence,
+not a playing-strength claim. PR CI on the campaign source revision already passed
+Checks and all nine Chromium cases; final-head CI is recorded in the PR.
+
+No rules, inference contracts, dependencies or AGENTS.md changed. Stronger neural
+training, universal strength claims, M7 packaging and general retention tooling
+remain outside this completed bounded study.

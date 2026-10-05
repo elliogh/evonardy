@@ -202,6 +202,10 @@ comparing compute budgets or confirming a champion.
 
 ### Bounded local strength study
 
+The [October 2026 study](docs/STRENGTH_STUDY.md) retained ev1 after 24 training
+runs and a complete seven-policy league; the best new GA-linear model remains
+a separate candidate.
+
 The separate offline study compares all five implemented training methods,
 including GA-linear, against a saved incumbent. It uses five training seeds,
 4096 physical training/selection games per method/seed, development evaluations,
