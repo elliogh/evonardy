@@ -121,6 +121,10 @@ triple-win backgammon result. Formal rules and the bearing-off clarification are
 [docs/RULES.md](docs/RULES.md). Heuristic features and weights are in
 [docs/FEATURES.md](docs/FEATURES.md).
 
+The shared M4 neural input is specified in [docs/ENCODER.md](docs/ENCODER.md):
+a versioned 56-value position vector. Neural evaluation and learning remain
+subsequent M4 tasks.
+
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build
 make smoke   # baselines/replays + 32 GA games, frozen save, 8 evaluation games

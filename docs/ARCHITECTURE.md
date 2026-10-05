@@ -1,7 +1,8 @@
 # Architecture
 
-The current implemented iteration is M0–M3. Later modules are added together with
-behavior rather than as empty scaffolds. Go 1.25 with the standard library;
+M0–M3 provides the runnable application. M4 now includes its shared position
+encoder; the neural evaluator and learner are subsequent tasks. Later modules
+are added with behavior rather than empty scaffolds. Go 1.25 with the standard library;
 React 19 + TypeScript 5 + Vite 7, with Vitest 4. Exact frontend versions are
 locked in `web/package-lock.json`. Go has no external dependencies, so a
 go.sum file is not needed yet. All repository content and UI copy use English.
@@ -14,6 +15,8 @@ go.sum file is not needed yet. All repository content and UI copy use English.
 - `features` / `agent`: normalized features and selection among supplied legal
   actions. Random has its own random source. Heuristic is deterministic and
   selects the first action on ties. Future dice are inaccessible.
+- `encoder`: validated, versioned 56-value public full-turn position input in
+  fixed global-point order, separate from linear features. See [ENCODER.md](ENCODER.md).
 - `random`: named deterministic PCG streams for the environment and agents;
   random state is serialized separately from the position.
 - `arena`: bounded simulation workers, context cancellation, stable game IDs,
@@ -55,6 +58,6 @@ replays are immutable.
 
 ## Later milestones
 
-M4 adds the encoder, MLP, and RL. GA-MLP and Hybrid follow in M5; comparisons
+M4 continues with the MLP and RL. GA-MLP and Hybrid follow in M5; comparisons
 and release work remain M6–M7. The completed GA-linear lifecycle and random
 contracts are documented in [TRAINING.md](TRAINING.md).
