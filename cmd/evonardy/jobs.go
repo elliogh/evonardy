@@ -27,9 +27,10 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	dir := flags.String("data-dir", "./data", "exclusive application directory")
 	config := flags.String("config", "", "JSON config; required for train")
 	name := flags.String("name", "GA-linear experiment", "training display name")
+	algorithm := flags.String("algorithm", "ga-linear", "training method: ga-linear, td0, td-lambda")
 	runID := flags.String("run", "", "interrupted or stopped job ID")
 	botID := flags.String("bot", "", "frozen model ID")
-	saveName := flags.String("save-name", "", "save the best completed training candidate")
+	saveName := flags.String("save-name", "", "save the final neural snapshot or best final GA candidate")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return nil
@@ -43,11 +44,23 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 		return fmt.Errorf("train requires --config; resume requires --run; evaluate requires --bot")
 	}
 	cfg := training.DefaultConfig()
+	td := training.DefaultTDConfig()
+	if *algorithm == "td-lambda" {
+		td = training.DefaultTDLambdaConfig()
+	}
+	if *algorithm != "ga-linear" && *algorithm != "td0" && *algorithm != "td-lambda" {
+		return fmt.Errorf("unknown training algorithm")
+	}
+	if kind != "train" && *algorithm != "ga-linear" {
+		return fmt.Errorf("resume/evaluate use their saved model or algorithm")
+	}
 	ec := jobs.DefaultEvaluationConfig()
 	if *config != "" {
 		var value any = &cfg
 		if kind == "evaluate" {
 			value = &ec
+		} else if *algorithm != "ga-linear" {
+			value = &td
 		}
 		if kind == "resume" {
 			return fmt.Errorf("resume uses its saved config")
@@ -57,8 +70,17 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 		}
 	}
 	if kind == "train" {
-		if err := cfg.Validate(); err != nil {
-			return err
+		if *algorithm == "ga-linear" {
+			if err := cfg.Validate(); err != nil {
+				return err
+			}
+		} else {
+			if err := td.Validate(); err != nil {
+				return err
+			}
+			if (*algorithm == "td0" && td.Lambda != 0) || (*algorithm == "td-lambda" && td.Lambda == 0) {
+				return fmt.Errorf("td0 requires zero lambda; td-lambda requires positive lambda")
+			}
 		}
 	}
 	if kind == "evaluate" {
@@ -88,7 +110,14 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	var x jobs.Snapshot
 	switch kind {
 	case "train":
-		x, err = m.Start(ctx, jobs.StartRequest{Command: cmd, Name: *name, Config: cfg})
+		req := jobs.StartRequest{Command: cmd, Name: *name, Config: cfg}
+		if *algorithm != "ga-linear" {
+			req.Config, req.TDConfig, req.Algorithm = training.Config{}, &td, td.Algorithm()
+			if *name == "GA-linear experiment" {
+				req.Name = *algorithm + " experiment"
+			}
+		}
+		x, err = m.Start(ctx, req)
 	case "evaluate":
 		x, err = m.Evaluate(ctx, jobs.EvaluateRequest{Command: cmd, BotID: *botID, Config: ec})
 	case "resume":
@@ -117,7 +146,13 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 		if err != nil {
 			return err
 		}
-		card, err := m.Save(context.Background(), result.ID, jobs.SaveRequest{Command: library.Command{CommandID: id, ExpectedVersion: result.Version}, Generation: result.Generation, CandidateID: result.Candidates[0].ID, Name: *saveName})
+		candidateID := ""
+		if result.NeuralCandidate != nil {
+			candidateID = result.NeuralCandidate.ID
+		} else if len(result.Candidates) > 0 {
+			candidateID = result.Candidates[0].ID
+		}
+		card, err := m.Save(context.Background(), result.ID, jobs.SaveRequest{Command: library.Command{CommandID: id, ExpectedVersion: result.Version}, Generation: result.Generation, CandidateID: candidateID, Name: *saveName})
 		if err != nil {
 			return err
 		}

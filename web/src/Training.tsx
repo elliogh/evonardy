@@ -545,7 +545,7 @@ function JobDetail({
               <div>
                 <small>Generations</small>
                 <strong>
-                  {x.generation} / {x.config?.generations}
+                  {x.generation} / {x.config?.generations ?? x.generation_budget}
                 </strong>
                 <span>
                   {x.state === "completed"
@@ -577,7 +577,7 @@ function JobDetail({
             value={kind === "training" ? x.counters.games : x.generation_games}
             max={
               kind === "training"
-                ? x.config!.generations * x.generation_budget
+                ? (x.config?.generations ?? 1) * x.generation_budget
                 : x.generation_budget
             }
           />

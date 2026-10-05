@@ -1,4 +1,4 @@
-# GA-linear training and independent evaluation — M3
+# Training and independent evaluation
 
 Training changes the nine coefficients of `long-nardy-features-v1`. Inference
 uses the existing frozen linear evaluator and Go legal actions. The ruleset,
@@ -114,8 +114,50 @@ mean signed points, and mars wins. Stopped batches have no aggregate result and
 can resume. Truncated batches fail with actual records and no aggregate result.
 My bots links to each model's latest completed independent result. Smoke batches
 verify execution and persistence, not playing strength. Confidence intervals,
-league comparisons, neural evaluators, RL, and Hybrid are later milestones.
+league comparisons, and Hybrid are later milestones.
 Charts contain saved generation metrics; candidates are promoted only by the user.
+
+## Neural TD training
+
+TD(0) and accumulating TD(lambda) learn the shared `56 → 32 → 1` tanh network
+through sequential real self-play. Both colors use a fixed White value perspective;
+each turn applies one plain-SGD TD update. Terminal reward is +1/-1 without mars
+multipliers. Full numerical, exploration, trace, and checkpoint contracts are in
+[TD.md](TD.md). Alpha/epsilon/lambda are learning settings, not strength estimates.
+
+The CLI shares the existing queue, controls, immutable publication, and independent
+evaluation. Stop the server before opening its data directory offline:
+
+```bash
+bin/evonardy train --algorithm td0 --config configs/td-zero-smoke.json \
+  --data-dir ./data --save-name "My TD(0) bot"
+bin/evonardy train --algorithm td-lambda --config configs/td-lambda-smoke.json \
+  --data-dir ./data --save-name "My TD(lambda) bot"
+bin/evonardy resume --run <run-id> --data-dir ./data
+bin/evonardy evaluate --bot <saved-bot-id> --config configs/evaluation-smoke.json \
+  --data-dir ./data
+```
+
+Both presets run four guarded games. CLI defaults are seed=42, games=32,
+max_turns=1200, alpha=0.001, epsilon=0.05; `td-lambda` additionally defaults to
+lambda=0.7. `td0` requires lambda=0; `td-lambda` requires positive lambda. A durable
+job permits 1–10000 games, 1–10000 turns per game, and at most 200000000 turn slots.
+There is one sequential learner, with no workers/population/generation settings.
+
+`--save-name` publishes the final game checkpoint after full completion; earlier
+checkpoints can be saved through the API. Resume uses the saved algorithm/config
+without another `--algorithm` flag. SIGINT/SIGTERM commits the current game boundary
+before returning a resumable snapshot. Startup leaves interrupted jobs available
+for explicit resume. Truncated self-play is counted separately, has no winner or
+terminal reward, and retains its last ordinary bootstrap update. It does not
+produce an invented fitness score or fail TD training.
+
+Counters report physical games, completed/truncated games, decisions, actual neural
+forward evaluations, and `updates` (one per full turn). GA mutation/crossover
+counters remain zero. Each game's history reports mean absolute TD error and
+actual outcome/work; it is not calibrated win probability or an independent
+evaluation. Frozen neural packages can be evaluated or played from My bots without
+a learner. Browser configuration/charts are the remaining M4 UI task.
 
 ## Training games on the board
 
