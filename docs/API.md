@@ -106,8 +106,14 @@ Manifest/model files stay immutable; rename atomically updates only metadata
 and its command ledger. Save receipts live in `bots/commands/`, with a limit of
 10000 fresh save commands; existing receipts remain retryable.
 
-Format version 1 supports linear float64 weights (9 inputs → 1 value) and the
-uniform random baseline. Linear inference uses stable first-action ties,
+Format version 1 supports linear float64 weights (9 inputs → 1 value), the
+uniform random baseline, and the `tanh-56-32-1-v1` neural evaluator. Neural
+manifests use `features_version: "long-nardy-encoder-v1"`, architecture
+`[56,32,1]`, and 1857 flat model weights in [NEURAL.md](NEURAL.md) order.
+Neural inference ranks full-turn successors using White's value: White maximizes,
+Black minimizes, immediate wins take priority, and terminal values are exact
+`+1`/`-1`. It uses stable first-action ties and no exploration or random source.
+Linear inference uses stable first-action ties,
 White value perspective, win objective, and zero exploration. Random is itself
 a stochastic strategy, with a separate per-turn agent source. The loader checks
 format/rules/features, shapes, weight count, raw-file SHA-256, finite weights

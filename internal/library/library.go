@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"evonardy/internal/agent"
+	"evonardy/internal/encoder"
 	"evonardy/internal/features"
 	"evonardy/internal/game"
+	"evonardy/internal/neural"
 	"evonardy/internal/storage"
 )
 
@@ -209,6 +211,13 @@ func validateModel(m Manifest, model Model) error {
 		if m.FeaturesVersion != "none" || len(m.Architecture) != 0 || len(model.Weights) != 0 || m.Inference.TieBreak != "uniform_unique" {
 			return fmt.Errorf("%w: incompatible random model", ErrInvalid)
 		}
+	case neural.Version:
+		if m.FeaturesVersion != encoder.Version || !slices.Equal(m.Architecture, []int{neural.Inputs, neural.Hidden, neural.Outputs}) || m.Inference.TieBreak != "stable_first" {
+			return fmt.Errorf("%w: incompatible neural shapes or encoder", ErrInvalid)
+		}
+		if _, err := neural.New(model.Weights); err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
 	default:
 		return fmt.Errorf("%w: unsupported evaluator", ErrInvalid)
 	}
@@ -274,6 +283,9 @@ func (l *Library) Agent(id string, source agent.IntSource) (agent.Agent, error) 
 	if m.Evaluator == "random" {
 		return agent.NewRandom(source), nil
 	}
+	if m.Evaluator == neural.Version {
+		return agent.NewNeural(model.Weights)
+	}
 	var weights features.Vector
 	copy(weights[:], model.Weights)
 	return agent.Linear{Weights: weights}, nil
@@ -292,6 +304,12 @@ func (l *Library) Freeze(id string) (agent.Policy, error) {
 		return agent.Policy{}, err
 	}
 	p := agent.Policy{ID: id, Kind: m.Evaluator}
+	if m.Evaluator == neural.Version {
+		p.Kind = "neural"
+		copy(p.NeuralParameters[:], model.Weights)
+		p.NetworkVersion, p.EncoderVersion = neural.Version, encoder.Version
+		return p, p.Validate()
+	}
 	copy(p.Weights[:], model.Weights)
 	return p, p.Validate()
 }
@@ -305,6 +323,10 @@ func (l *Library) publish(name string, model Model, kind, source, parent string)
 		m.FeaturesVersion = "none"
 		m.Architecture = []int{}
 		m.Inference.TieBreak = "uniform_unique"
+	}
+	if kind == neural.Version {
+		m.FeaturesVersion = encoder.Version
+		m.Architecture = []int{neural.Inputs, neural.Hidden, neural.Outputs}
 	}
 	if err := validateModel(m, model); err != nil {
 		return Card{}, err
@@ -330,6 +352,13 @@ func (l *Library) SaveLinear(name string, weights []float64, source, parent stri
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.publish(name, Model{Weights: append([]float64{}, weights...)}, "linear", source, parent)
+}
+
+// SaveNeural publishes a parameter snapshot independent of the learner's memory.
+func (l *Library) SaveNeural(name string, parameters []float64, source, parent string) (Card, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.publish(name, Model{Weights: append([]float64{}, parameters...)}, neural.Version, source, parent)
 }
 
 func (l *Library) SaveCopy(req SaveRequest) (Card, error) {

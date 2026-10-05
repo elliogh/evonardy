@@ -124,7 +124,8 @@ triple-win backgammon result. Formal rules and the bearing-off clarification are
 The shared M4 neural input is specified in [docs/ENCODER.md](docs/ENCODER.md):
 a versioned 56-value position vector. [docs/NEURAL.md](docs/NEURAL.md) specifies
 the shared `56 → 32 → 1` tanh network and its verified parameter gradients.
-Frozen neural inference packages and learning remain subsequent M4 tasks.
+Frozen neural models can be published/loaded through the Go library and played
+without a learner. Neural training and its UI remain subsequent M4 tasks.
 
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build
