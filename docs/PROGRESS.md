@@ -1,4 +1,13 @@
-# EvoNardy progress
+# EvoNardy progress archive
+
+Task tracking moved to [GitHub Issues](https://github.com/elliogh/evonardy/issues),
+[milestones](https://github.com/elliogh/evonardy/milestones), and the
+[EvoNardy roadmap](https://github.com/users/elliogh/projects/1). This file retains
+the original implementation history and measured results through the training
+game viewer. Statements about next milestones below describe their original
+iterations; GitHub is authoritative for current priorities and status.
+Record new checks and incomplete work in linked issues and pull requests.
+See [WORKFLOW.md](WORKFLOW.md) for the current process.
 
 ## M0–M1 iteration
 

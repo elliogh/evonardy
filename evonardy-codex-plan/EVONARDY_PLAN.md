@@ -15,7 +15,7 @@ Start application → train agent → evaluate candidate → save bot
 
 This is an implementation brief, not a description of existing behavior. All numerical configurations below are initial experimental settings, not promises of performance or playing strength.
 
-Work through milestones sequentially. Before changes, inspect the repository, existing AGENTS.md, and available tools. Preserve other contributors' changes and instructions. Create `docs/PROGRESS.md` with tasks, statuses, and check results. Keep an available planning tool current. Update progress and run the relevant checks after each milestone.
+Work through milestones sequentially. Before changes, inspect the repository, existing AGENTS.md, and available tools. Preserve other contributors' changes and instructions. Track tasks, priorities, acceptance criteria, and current status in GitHub Issues, milestones, and the EvoNardy roadmap; see `docs/WORKFLOW.md`. Record actual checks and incomplete work in linked issues or pull requests. `docs/PROGRESS.md` retains the pre-migration history. Run the relevant checks after each milestone.
 
 **First working version — M0–M3:** correct long nardy, UI, bot library, GA-linear training, and human play against saved models. **Research version — M4–M7:** RL, GA-MLP, Hybrid, comparisons, and extended analysis.
 
