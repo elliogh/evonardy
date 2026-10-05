@@ -175,15 +175,40 @@ func NextTasks(s State) []Task {
 	return tasks
 }
 func Play(ctx context.Context, s State, tasks []Task) ([]Score, error) {
+	wave, err := PlayWave(ctx, s, tasks)
+	return wave.Scores, err
+}
+
+// PlayedGame is one actual evaluated match, retained for bounded observation.
+type PlayedGame struct {
+	Generation    int           `json:"generation"`
+	Index         int           `json:"index"`
+	CandidateID   string        `json:"candidate_id"`
+	OpponentID    string        `json:"opponent_id"`
+	CandidateSide game.Player   `json:"candidate_side"`
+	Replay        replay.Record `json:"replay"`
+}
+
+func (g PlayedGame) Key() string { return fmt.Sprintf("g%d-game%d", g.Generation, g.Index+1) }
+
+type Wave struct {
+	Scores []Score
+	Sample *PlayedGame
+}
+
+// PlayWave preserves a real replay without adding games or changing their RNGs.
+func PlayWave(ctx context.Context, s State, tasks []Task) (Wave, error) {
 	if len(tasks) == 0 || len(tasks) > s.Config.Workers {
-		return nil, fmt.Errorf("invalid wave size")
+		return Wave{}, fmt.Errorf("invalid wave size")
 	}
 	scores := make([]Score, len(tasks))
+	var sample *PlayedGame
+	sampleIndex := (len(s.Results) / s.Config.Workers) % len(tasks)
 	errs := make([]error, len(tasks))
 	var wg sync.WaitGroup
 	for _, t := range tasks {
 		if t.Index < len(s.Results) || t.Index >= Slots(s) || t != task(s, t.Index) {
-			return nil, fmt.Errorf("invalid task")
+			return Wave{}, fmt.Errorf("invalid task")
 		}
 	}
 	for i, t := range tasks {
@@ -199,16 +224,19 @@ func Play(ctx context.Context, s State, tasks []Task) ([]Score, error) {
 			errs[i] = err
 			if err == nil {
 				scores[i] = Score{Index: t.Index, Seed: t.Seed, Side: t.Side, OpponentID: opponent.ID, Status: r.Record.Status, Outcome: r.Record.Outcome, Turns: r.Decisions, ForwardEvaluations: r.ForwardEvaluations}
+				if i == sampleIndex {
+					sample = &PlayedGame{Generation: s.Generation + 1, Index: t.Index, CandidateID: candidate.ID, OpponentID: opponent.ID, CandidateSide: t.Side, Replay: r.Record}
+				}
 			}
 		}()
 	}
 	wg.Wait()
 	for _, err := range errs {
 		if err != nil {
-			return nil, err
+			return Wave{}, err
 		}
 	}
-	return scores, nil
+	return Wave{Scores: scores, Sample: sample}, nil
 }
 func ValidScore(score Score, maxTurns int) error {
 	if score.Turns < 1 || score.Turns > maxTurns || score.ForwardEvaluations < 0 || !score.Side.Valid() {

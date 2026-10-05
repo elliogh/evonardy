@@ -66,6 +66,20 @@ func TestTrainingHTTPPublicationAndEvaluation(t *testing.T) {
 	if w = call("GET", "/api/training/runs/http-train/generations/1", nil); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
+	w = call("GET", "/api/training/runs/http-train/watch", nil)
+	if w.Code != 200 {
+		t.Fatal("missing training game", w.Code, w.Body.String())
+	}
+	var watched jobs.WatchedGame
+	if err := json.Unmarshal(w.Body.Bytes(), &watched); err != nil {
+		t.Fatal(err)
+	}
+	if watched.Key != x.WatchedGame.Key || len(watched.Positions) != watched.Turns+1 || watched.Positions[0].Checkers[0][0] != 15 || watched.Replay.Outcome == nil {
+		t.Fatal("invalid watch snapshot")
+	}
+	if w = call("GET", "/api/training/runs/missing/watch", nil); w.Code != 404 {
+		t.Fatal("invented missing game")
+	}
 	save := jobs.SaveRequest{Command: library.Command{CommandID: "http-save", ExpectedVersion: x.Version}, Generation: 1, CandidateID: x.Candidates[1].ID, Name: "HTTP bot"}
 	w = call("POST", "/api/training/runs/http-train/save-bot", save)
 	if w.Code != 200 {

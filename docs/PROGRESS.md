@@ -257,3 +257,75 @@ embedding and packaging remain M7. M3 has no automatic champion promotion or
 confidence intervals. Baseline simulation batches remain nonresumable; training
 and evaluation jobs are resumable. Archive cleanup is manual, storage requires
 Unix flock, and Linux execution/non-Chromium browsers remain untested.
+
+## Training game viewer — complete
+
+The user requested visible games during training. The UI shows actual sampled training
+matches on the Training screen with automatic playback, pause, turn navigation,
+dice, participants, and results. Playback is independent of the training budget
+and scheduler; slow or disconnected viewers never block matches. Retain only the
+latest sampled replay per run, and restore it from checkpoints. Older checkpoints
+without a replay remain loadable. This replaces the brief's separate exhibition
+watch-game suggestion for this feature at the user's request.
+
+Checks use the already established public boundaries: training wave results and recorded
+matches, durable job snapshots/recovery, HTTP job routes, and actual browser flow.
+They verify sampled records against the training scores, unchanged deterministic work,
+checkpoint compatibility, authoritative Go positions, and playback while training.
+
+### Viewer behavior and checks
+
+One actual replay is selected from each completed worker batch. Sampling consumes
+no random draws and adds no matches. Job snapshots include a small notice; the
+new GET watch route returns that replay and positions reconstructed by Go. The
+checkpoint holds only the latest replay under its existing checksum envelope.
+Loading validates replay legality, hashes, schedule, participants, and notice;
+format-1 checkpoints with no viewer data remain compatible. Published inference
+packages, ruleset, and generation fitness are unchanged.
+
+Training games autoplay on the run page, with candidate/opponent colors, dice,
+moves, a terminal result, previous/next turn, a slider, playback speed, and a
+Follow training switch. Show latest game switches immediately. The browser keeps
+only the playing sample and the latest available one, and coalesces fetches to
+one in flight. Slow/hidden viewers do not pause training. Existing completed runs
+without a recorded replay show an honest empty preview; new or resumed runs
+record samples. Documentation and the brief were updated to match the request.
+
+Actual checks on the same Go 1.25.5 darwin/amd64 and Node/npm/Chromium environment:
+
+- `make test`: gofmt, vet, all 13 Go packages, race, frontend typecheck, 4 Vitest
+  tests, and build: pass. Additional focused training/job tests and race also pass.
+- Wave records match their actual evaluated score, dice seed, participants, side,
+  turn count, and outcome; replay validation succeeds. Viewing leaves counters,
+  versions, and revisions unchanged. Returned board/replay mutations cannot change
+  durable records. Reopen restores the same replay and Go positions. A format-1
+  checkpoint with watcher fields absent loads without inventing an old game.
+- HTTP checks the watch route, missing-game 404, Go positions, and existing SSE.
+- `make smoke`: 12 complete baseline games, 2 separately truncated games, and all
+  70 accumulated replays (60 complete, 10 truncated) verified. Training again
+  produced exactly 32 games, 2809 decisions, 61995 forward evaluations, 27 mutations,
+  and 3 crossovers; the independent batch completed 8 games. Work matches M3 before
+  observation was added. No long training or release publication was run.
+- `make build`: frontend and macOS CLI: pass.
+- `make e2e`: all 4 actual Chromium scenarios passed in 1.4 minutes. The viewer
+  scenario confirms autoplay advances, compares every board point with the actual
+  Go position after a turn, pauses while job counters continue increasing, steps
+  forward/backward, seeks to the true winner, switches samples, and restores the
+  same replay after server restart. The previous 3 play/train/evaluate scenarios
+  still pass.
+- After mobile label and cursor refinements, the focused viewer scenario passed
+  again in 7.2 seconds including setup. Desktop and 390×844 screenshots inspected:
+  controls fit, board counts/point labels remain visible, and there is no horizontal
+  overflow. Final frontend/CLI build passed.
+- `git diff --check`, gofmt, and the English-source scan passed. AGENTS.md and
+  dependencies were unchanged. Playback cursors remain transient; retaining all
+  historical training replays is outside this feature. M4 remains next.
+
+`make bench` passed after the other suites finished, on the same Intel Core
+i5-1038NG7 machine with 200ms samples; measurements, not promises:
+
+| Check | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| LegalTurns, midgame fixture, 3–3 | 237218 | 272303 | 467 |
+| HeuristicScore, opening position | 215.4 | 0 | 0 |
+| Simulation, seed 42, 1 Heuristic–Random game | 14649727 | 14370574 | 31411 |

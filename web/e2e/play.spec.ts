@@ -59,6 +59,127 @@ test.afterAll(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
+test("watch real training games without pausing learning and recover the board after restart", async ({
+  page,
+}, info) => {
+  const recorded = new Map<
+    string,
+    {
+      key: string;
+      positions: Snapshot["position"][];
+      replay: { outcome: Snapshot["outcome"]; events: unknown[] };
+    }
+  >();
+  page.on("response", async (response) => {
+    if (response.url().endsWith("/watch") && response.ok()) {
+      const x = await response.json();
+      recorded.set(x.key, x);
+    }
+  });
+  await page.goto("/#/training");
+  await page
+    .getByRole("button", { name: "Use smoke preset", exact: true })
+    .click();
+  await page
+    .getByRole("spinbutton", { name: "Generations", exact: true })
+    .fill("8");
+  await page
+    .getByRole("spinbutton", { name: "Pairs per opponent", exact: true })
+    .fill("4");
+  await page
+    .getByRole("button", { name: "Start training", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/training\//);
+  const id = page.url().split("/training/")[1];
+  const job = async (): Promise<Job> =>
+    await (await page.request.get(`/api/training/runs/${id}`)).json();
+  const viewer = page.locator(".watched-match");
+  await expect(viewer).toBeVisible();
+  await expect
+    .poll(async () => Number(await viewer.getAttribute("data-frame")))
+    .toBeGreaterThan(0);
+  await page
+    .getByRole("button", { name: "Pause playback", exact: true })
+    .click();
+  const slider = page.getByRole("slider", {
+    name: "Training game turn",
+    exact: true,
+  });
+  await slider.focus();
+  await slider.press("Home");
+  await expect(viewer).toHaveAttribute("data-frame", "0");
+  await slider.press("ArrowRight");
+  await expect(viewer).toHaveAttribute("data-frame", "1");
+  const key = (await viewer.getAttribute("data-game-key"))!;
+  await expect.poll(() => recorded.has(key)).toBe(true);
+  const position = recorded.get(key)!.positions[1];
+  for (let point = 0; point < 24; point++) {
+    const count = position.checkers[0][point] + position.checkers[1][point];
+    const player = position.checkers[0][point] > 0 ? "White" : "Black";
+    await expect(viewer.locator(`[data-point="${point}"]`)).toHaveAttribute(
+      "aria-label",
+      `Point ${point + 1}, ${count ? `${count} ${player} checkers` : "empty"}`,
+    );
+  }
+  const before = await job();
+  expect(before.state).toBe("running");
+  await expect
+    .poll(async () => (await job()).counters.games)
+    .toBeGreaterThan(before.counters.games);
+  await expect(viewer).toHaveAttribute("data-frame", "1");
+  await expect(viewer).toHaveAttribute("data-game-key", key);
+  await page.getByRole("button", { name: "Next turn", exact: true }).click();
+  await expect(viewer).toHaveAttribute("data-frame", "2");
+  await page
+    .getByRole("button", { name: "Previous turn", exact: true })
+    .click();
+  await expect(viewer).toHaveAttribute("data-frame", "1");
+  await slider.focus();
+  await slider.press("End");
+  await expect(viewer).toHaveAttribute(
+    "data-frame",
+    String(recorded.get(key)!.replay.events.length),
+  );
+  const winner =
+    recorded.get(key)!.replay.outcome!.winner === 0 ? "White" : "Black";
+  await expect(viewer.locator(".match-result")).toContainText(`${winner} wins`);
+  await page
+    .getByRole("button", { name: "Stop and checkpoint", exact: true })
+    .click();
+  await expect(page.locator(".job-state")).toHaveAttribute(
+    "data-state",
+    "stopped",
+  );
+  const latest = await (
+    await page.request.get(`/api/training/runs/${id}/watch`)
+  ).json();
+  await page
+    .getByRole("button", { name: "Show latest game", exact: true })
+    .click();
+  await expect(viewer).toHaveAttribute("data-game-key", latest.key);
+  await page.screenshot({
+    path: info.outputPath("watch-desktop.png"),
+    fullPage: true,
+  });
+  await stop();
+  await start();
+  await page.reload();
+  await expect(viewer).toHaveAttribute("data-game-key", latest.key);
+  expect(
+    await (await page.request.get(`/api/training/runs/${id}/watch`)).json(),
+  ).toEqual(latest);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: info.outputPath("watch-mobile.png"),
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
+
 async function snapshot(page: Page, id: string): Promise<Snapshot> {
   const response = await page.request.get(`/api/games/${id}`);
   expect(response.ok()).toBeTruthy();
@@ -443,11 +564,9 @@ test("train, publish, independently evaluate, resume after restart, and play a f
   );
   await player.close();
   await page.goto("/");
-  const card = page
-    .locator(".bot-card")
-    .filter({
-      has: page.getByRole("heading", { name: bot.name, exact: true }),
-    });
+  const card = page.locator(".bot-card").filter({
+    has: page.getByRole("heading", { name: bot.name, exact: true }),
+  });
   await expect(card).toContainText("4 games");
   expect(errors).toEqual([]);
 });

@@ -10,6 +10,7 @@ import type {
   Metric,
   TrainingConfig,
 } from "./jobs";
+import { TrainingGame } from "./TrainingGame";
 
 function NumberField({
   label,
@@ -582,6 +583,7 @@ function JobDetail({
           />
           {kind === "training" ? (
             <>
+              <TrainingGame job={x} />
               <section className="lab-panel">
                 <div className="section-heading">
                   <h2>Generation fitness</h2>

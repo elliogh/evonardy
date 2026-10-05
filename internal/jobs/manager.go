@@ -113,6 +113,7 @@ type Snapshot struct {
 	Saved            []Publication        `json:"saved"`
 	WallSeconds      float64              `json:"wall_seconds"`
 	Evaluation       *EvaluationSummary   `json:"evaluation"`
+	WatchedGame      *GameNotice          `json:"watched_game,omitempty"`
 }
 type receipt struct {
 	Hash    string `json:"hash"`
@@ -130,12 +131,13 @@ type evaluationState struct {
 }
 type record struct {
 	Snapshot
-	FormatVersion    int                `json:"format_version"`
-	CreationHash     string             `json:"creation_hash"`
-	Commands         map[string]receipt `json:"commands"`
-	Training         *training.State    `json:"training"`
-	FrozenEvaluation *evaluationState   `json:"frozen_evaluation"`
-	GenerationHashes []string           `json:"generation_hashes"`
+	FormatVersion    int                  `json:"format_version"`
+	CreationHash     string               `json:"creation_hash"`
+	Commands         map[string]receipt   `json:"commands"`
+	Training         *training.State      `json:"training"`
+	FrozenEvaluation *evaluationState     `json:"frozen_evaluation"`
+	GenerationHashes []string             `json:"generation_hashes"`
+	WatchReplay      *training.PlayedGame `json:"watch_replay,omitempty"`
 }
 type envelope struct {
 	Checksum string          `json:"checksum"`
@@ -227,6 +229,7 @@ func generationPath(id string, g int) string {
 	return filepath.Join("runs", id, "generations", fmt.Sprintf("%04d.json", g))
 }
 func syncSnapshot(r *record) {
+	r.WatchedGame = gameNotice(r.WatchReplay)
 	r.CanResume = r.State == Stopped || r.State == Interrupted
 	if r.Training != nil {
 		st := r.Training
@@ -668,9 +671,12 @@ func (m *Manager) run(id string) {
 		m.mu.Unlock()
 		start := time.Now()
 		var scores []training.Score
+		var watched *training.PlayedGame
 		var err error
 		if r.Kind == Training {
-			scores, err = training.Play(context.Background(), *r.Training, training.NextTasks(*r.Training))
+			var wave training.Wave
+			wave, err = training.PlayWave(context.Background(), *r.Training, training.NextTasks(*r.Training))
+			scores, watched = wave.Scores, wave.Sample
 		} else {
 			scores, err = playEvaluation(*r.FrozenEvaluation)
 		}
@@ -678,6 +684,7 @@ func (m *Manager) run(id string) {
 		current := m.records[id]
 		current.Revision++
 		if err == nil && current.Kind == Training {
+			current.WatchReplay = watched
 			var state training.State
 			state, err = training.Add(*current.Training, scores)
 			current.Training = &state
@@ -800,10 +807,16 @@ func validate(r record) error {
 		if err := training.Validate(*r.Training); err != nil {
 			return err
 		}
+		if err := validateWatch(r); err != nil {
+			return err
+		}
 		if r.State == Completed && r.Training.Generation != r.Training.Config.Generations {
 			return fmt.Errorf("incomplete training marked completed")
 		}
 	} else if r.Kind == Evaluation {
+		if r.WatchReplay != nil || r.WatchedGame != nil {
+			return fmt.Errorf("training replay in evaluation checkpoint")
+		}
 		e := r.FrozenEvaluation
 		if e == nil || r.Training != nil || e.Algorithm != "paired-evaluation-v1" || e.Ruleset != game.Ruleset || e.FeaturesVersion != features.Version {
 			return fmt.Errorf("incompatible evaluation checkpoint")

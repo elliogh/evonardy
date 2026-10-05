@@ -52,6 +52,10 @@ bin/evonardy bots list --data-dir ./data
 
 Open **Training** to evolve linear weights through completed games. Use the smoke
 preset for a short run, choose an evaluated candidate, and save it to My bots.
+The **Training games** board automatically plays sampled actual matches from the
+run. Pause, step through turns, change playback speed, or follow newer games.
+Training continues at full speed while you watch. The latest sample survives
+restart; runs created before this feature have no recorded preview until resumed.
 **Evaluate** runs separate paired games against frozen opponents; the library
 shows the latest completed result. Stop saves a checkpoint and Resume continues
 it after restart. You can play a saved bot while another run trains.

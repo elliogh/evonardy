@@ -90,6 +90,16 @@ export type Job = {
     config: EvaluationConfig;
     stats: Stats | null;
   } | null;
+  watched_game?: {
+    key: string;
+    generation: number;
+    index: number;
+    candidate_id: string;
+    opponent_id: string;
+    candidate_side: 0 | 1;
+    turns: number;
+    status: string;
+  };
 };
 export const failure = (e: unknown) =>
   e instanceof Error ? e.message : "Something went wrong";

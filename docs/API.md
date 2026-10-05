@@ -25,6 +25,7 @@ snapshots; SSE carries small change notifications. Frontend types are in
 | POST | `/api/training/runs/{id}/stop` or `/resume` | `{command_id, expected_version}`; checkpoint or continue |
 | POST | `/api/training/runs/{id}/save-bot` | `{command_id, expected_version, generation, candidate_id, name}`; immutable bot card |
 | GET | `/api/training/runs/{id}/generations/{n}` | Evaluated generation, ranked candidates, and actual scores |
+| GET | `/api/training/runs/{id}/watch` | Latest sampled training replay and Go-reconstructed positions |
 | GET | `/api/training/runs/{id}/events` | Throttled SSE revision notices |
 | GET / POST | `/api/evaluations` | Summaries / start `{command_id, expected_version:0, bot_id, config}` |
 | GET | `/api/evaluations/{id}` | Frozen-model evaluation snapshot and completed score prefix |
@@ -154,3 +155,33 @@ at `runs/<id>/generations/NNNN.json`, and evaluation checkpoints at
 `evaluations/<id>/checkpoint.json`. The server and offline CLI share the same
 exclusive data-directory owner and job manager. Training never modifies published
 models or human sessions. A saved candidate is playable while another job runs.
+
+## Watching training matches
+
+`watched_game` is an optional small notice in training snapshots: key, generation,
+zero-based game index within the generation, candidate/opponent IDs, candidate
+color, turn count, and status. It identifies one actual evaluated match from the
+most recently committed worker batch. No additional exhibition game is created.
+
+`GET /api/training/runs/{id}/watch` returns that notice together with `replay` and
+`positions`. Positions come from Go replay validation: item 0 is the opening
+position and item N follows full turn N. The result belongs to the same game
+used for fitness and work counters. This read performs no inference or mutation.
+A missing job, evaluation job, or run with no recorded sample returns 404.
+The latest sample can advance between reading a notice and fetching its replay;
+the endpoint always returns the currently retained sample with its own key.
+
+Only one replay is retained per training checkpoint, under optional `watch_replay`.
+The existing SHA-256 envelope protects it; startup checks match identity, schedule,
+ruleset, full replay legality, and hashes. Format-1 checkpoints without viewer data
+remain loadable. Existing completed runs without a recorded replay show an empty
+preview. Resuming an older incomplete run records future samples normally.
+
+The browser retains the playing game and at most one newer sample. Fetches are
+coalesced to one in flight. Follow training advances to the newest available game
+when the current replay finishes; Show latest game switches immediately. Pause,
+speed, turn controls, and hidden-tab behavior affect only browser playback. SSE
+remains small and throttled; slow/disconnected viewers do not backpressure the
+scheduler. Playback cursors are transient and restart from the opening position
+when the page reloads. Watching preserves the training budget, RNGs, scores,
+selection, control versions, and work counters.
