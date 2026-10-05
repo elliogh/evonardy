@@ -2,6 +2,7 @@
 /.cache/
 /bin/
 /data/
+/local-artifacts/
 /web/node_modules/
 /web/dist/
 /web/coverage/

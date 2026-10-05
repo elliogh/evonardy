@@ -200,6 +200,39 @@ The default is a starting protocol, not a recommendation about sufficient playin
 strength. Read [research contracts](docs/RESEARCH.md) before interpreting intervals,
 comparing compute budgets or confirming a champion.
 
+### Bounded local strength study
+
+The separate offline study compares all five implemented training methods,
+including GA-linear, against a saved incumbent. It uses five training seeds,
+4096 physical training/selection games per method/seed, development evaluations,
+a finalist round robin and one independent 500-pair confirmation. Its two-hour
+deadline includes persistence; no new training starts after 105 minutes.
+
+```bash
+go build -o bin/evonardy-study ./cmd/evonardy-study
+bin/evonardy-study --print-config
+bin/evonardy-study --data-dir local-artifacts/study \
+  --incumbent-dir /path/to/archived/bots/MODEL_ID
+# SIGINT checkpoints the current job. Resume keeps the original deadline.
+bin/evonardy-study --data-dir local-artifacts/study --resume
+# Stop the application before installing the selected immutable packages.
+bin/evonardy-study --data-dir local-artifacts/study --resume --install-to ./data
+```
+
+The incumbent package is validated and copied without changing its parameters.
+Reports are `study/report.md` and `study/report.json` inside the isolated directory;
+JSON includes all raw evaluation scores and actual work, including interrupted
+jobs. Incomplete seed cohorts have no aggregate method estimate. The tournament
+can select a candidate from completed runs, but only completed independent
+confirmation can replace the incumbent. Installation retains the incumbent when
+confirmation fails and exposes the best newly trained candidate separately.
+The existing browser Research protocol remains available unchanged.
+
+Keep backups in `local-artifacts`, which is excluded from Git and ordinary CI.
+For a complete local reset, first stop every writer, archive the entire data
+directory together with checksums, then create a fresh directory. Moving only bot
+folders leaves dangling references in training, evaluation and game records.
+
 Tasks and current status: [GitHub Issues](https://github.com/elliogh/evonardy/issues)
 and the [EvoNardy roadmap](https://github.com/users/elliogh/projects/1).
 Stages and acceptance criteria: [milestones](https://github.com/elliogh/evonardy/milestones).
