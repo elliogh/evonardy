@@ -1,8 +1,8 @@
 # Architecture
 
 M0–M3 provides the runnable application. M4 now includes its shared position
-encoder, neural network, frozen neural inference, and sequential TD(0) self-play.
-Traces and durable neural jobs/UI remain subsequent work. Later modules are added
+encoder, neural network, frozen neural inference, and sequential TD self-play.
+Durable neural jobs/UI remain subsequent work. Later modules are added
 with behavior rather than empty scaffolds.
 Go 1.25 with the standard library;
 React 19 + TypeScript 5 + Vite 7, with Vitest 4. Exact frontend versions are
@@ -39,7 +39,7 @@ go.sum file is not needed yet. All repository content and UI copy use English.
   Host/Origin allowlists and strict JSON bodies. See [API.md](API.md).
 - `training`: pure GA-linear generation state, paired schedules, full-generation
   fitness, elitism/tournament selection, crossover, mutation, and measured work.
-  Sequential TD(0) uses the shared neural network and fixed White-reward targets,
+  Sequential TD(0)/TD(lambda) uses the shared neural network and fixed White-reward targets,
   with independent game-boundary state and real self-play. See [TD.md](TD.md).
 - `jobs`: bounded durable queue, atomic checkpoints, immutable generation archives,
   interruption recovery, versioned controls, frozen publication, and evaluation.
@@ -66,6 +66,6 @@ replays are immutable.
 
 ## Later milestones
 
-M4 continues with TD traces and its durable lifecycle/UI. GA-MLP and Hybrid follow in M5;
+M4 continues with its durable neural lifecycle/UI. GA-MLP and Hybrid follow in M5;
 comparisons and release work remain M6–M7. The completed GA-linear lifecycle and random
 contracts are documented in [TRAINING.md](TRAINING.md).

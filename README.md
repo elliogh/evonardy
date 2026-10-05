@@ -125,8 +125,8 @@ The shared M4 neural input is specified in [docs/ENCODER.md](docs/ENCODER.md):
 a versioned 56-value position vector. [docs/NEURAL.md](docs/NEURAL.md) specifies
 the shared `56 → 32 → 1` tanh network and its verified parameter gradients.
 Frozen neural models can be published/loaded through the Go library and played
-without a learner. [docs/TD.md](docs/TD.md) specifies the sequential TD(0) learner
-and real self-play. Traces and neural training CLI/API/UI remain subsequent M4 tasks.
+without a learner. [docs/TD.md](docs/TD.md) specifies sequential TD(0)/TD(lambda)
+learning and real self-play. Neural training CLI/API/UI remain subsequent M4 tasks.
 
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build

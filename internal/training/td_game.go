@@ -19,10 +19,24 @@ type TDConfig struct {
 	MaxTurns int     `json:"max_turns"`
 	Alpha    float64 `json:"alpha"`
 	Epsilon  float64 `json:"epsilon"`
+	Lambda   float64 `json:"lambda,omitempty"`
 }
 
 func DefaultTDConfig() TDConfig {
 	return TDConfig{Seed: 42, Games: 32, MaxTurns: 1200, Alpha: .001, Epsilon: .05}
+}
+
+func DefaultTDLambdaConfig() TDConfig {
+	c := DefaultTDConfig()
+	c.Lambda = .7
+	return c
+}
+
+func (c TDConfig) Algorithm() string {
+	if c.Lambda == 0 {
+		return TDAlgorithm
+	}
+	return TDLambdaAlgorithm
 }
 
 func (c TDConfig) Validate() error {
@@ -31,6 +45,9 @@ func (c TDConfig) Validate() error {
 	}
 	if !finiteTD(c.Alpha) || c.Alpha <= 0 || c.Alpha > 1 || !finiteTD(c.Epsilon) || c.Epsilon < 0 || c.Epsilon > 1 {
 		return fmt.Errorf("alpha in (0,1] and epsilon in [0,1] must be finite")
+	}
+	if !finiteTD(c.Lambda) || c.Lambda < 0 || c.Lambda > 1 {
+		return fmt.Errorf("lambda must be finite in [0,1]")
 	}
 	return nil
 }
@@ -64,7 +81,7 @@ func NewTD(c TDConfig) (TDState, error) {
 	if err := c.Validate(); err != nil {
 		return TDState{}, err
 	}
-	s := TDState{Version: 1, Algorithm: TDAlgorithm, Ruleset: game.Ruleset, EncoderVersion: encoder.Version, NetworkVersion: neural.Version, RandomContract: TDRandomContract, Config: c, History: []TDMetric{}}
+	s := TDState{Version: 1, Algorithm: c.Algorithm(), Ruleset: game.Ruleset, EncoderVersion: encoder.Version, NetworkVersion: neural.Version, RandomContract: TDRandomContract, Config: c, History: []TDMetric{}}
 	copy(s.Parameters[:], neural.Initialize(c.Seed, 0).Parameters())
 	return s, nil
 }
@@ -78,7 +95,7 @@ func TrainTDGame(ctx context.Context, s TDState) (TDState, PlayedGame, error) {
 	if s.Games >= s.Config.Games {
 		return s, PlayedGame{}, fmt.Errorf("TD game budget exhausted")
 	}
-	learner, err := NewTDLearner(s.Parameters[:], s.Config.Alpha)
+	learner, err := NewTDLambda(s.Parameters[:], s.Config.Alpha, s.Config.Lambda)
 	if err != nil {
 		return s, PlayedGame{}, err
 	}
@@ -103,7 +120,7 @@ func TrainTDGame(ctx context.Context, s TDState) (TDState, PlayedGame, error) {
 		}
 	}
 	p := game.Initial(starter)
-	learnerID := TDAlgorithm + "/self-play"
+	learnerID := s.Algorithm + "/self-play"
 	r := replay.New(p, opening, [2]string{learnerID, learnerID}, s.Config.Seed, uint64(s.Games), s.Config.MaxTurns)
 	metric := TDMetric{Game: s.Games + 1, Status: replay.Truncated}
 	var sideTurns [2]uint64
@@ -177,13 +194,13 @@ func TrainTDGame(ctx context.Context, s TDState) (TDState, PlayedGame, error) {
 }
 
 func ValidateTD(s TDState) error {
-	if s.Version != 1 || s.Algorithm != TDAlgorithm || s.Ruleset != game.Ruleset || s.EncoderVersion != encoder.Version || s.NetworkVersion != neural.Version || s.RandomContract != TDRandomContract {
+	if s.Version != 1 || s.Algorithm != s.Config.Algorithm() || s.Ruleset != game.Ruleset || s.EncoderVersion != encoder.Version || s.NetworkVersion != neural.Version || s.RandomContract != TDRandomContract {
 		return fmt.Errorf("incompatible TD state")
 	}
 	if err := s.Config.Validate(); err != nil {
 		return err
 	}
-	if _, err := NewTDLearner(s.Parameters[:], s.Config.Alpha); err != nil {
+	if _, err := NewTDLambda(s.Parameters[:], s.Config.Alpha, s.Config.Lambda); err != nil {
 		return err
 	}
 	if s.Games < 0 || s.Games > s.Config.Games || len(s.History) != s.Games {
