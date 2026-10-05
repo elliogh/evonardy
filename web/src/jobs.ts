@@ -50,6 +50,56 @@ export type TDMetric = {
   updates: number;
   mean_abs_delta: number;
 };
+export type Bounds = { min: number; max: number };
+export type Hyperparameters = {
+  alpha: number;
+  epsilon: number;
+  lambda: number;
+};
+export type HybridConfig = Hyperparameters & {
+  seed: number;
+  rounds: number;
+  games_per_round: number;
+  pairs_per_opponent: number;
+  workers: number;
+  max_turns: number;
+  alpha_bounds: Bounds;
+  epsilon_bounds: Bounds;
+  lambda_bounds: Bounds;
+};
+export const hybridDefaults: HybridConfig = {
+  seed: 42,
+  rounds: 4,
+  games_per_round: 8,
+  pairs_per_opponent: 1,
+  workers: 2,
+  max_turns: 1200,
+  alpha: 0.001,
+  epsilon: 0.05,
+  lambda: 0.7,
+  alpha_bounds: { min: 0.00001, max: 0.1 },
+  epsilon_bounds: { min: 0, max: 0.3 },
+  lambda_bounds: { min: 0, max: 0.95 },
+};
+export const gaMLPDefaults: TrainingConfig = {
+  ...defaults,
+  population: 8,
+  generations: 4,
+  initial_sigma: 1,
+  mutation_sigma: 0.02,
+};
+export type NeuroSummary = Omit<Candidate, "weights"> & {
+  reason: string;
+  hyperparameters?: Hyperparameters;
+};
+export type Replacement = {
+  child_id: string;
+  parent_id: string;
+  replaced_id: string;
+  reason: string;
+  before: Hyperparameters;
+  after: Hyperparameters;
+};
 export type EvaluationConfig = {
   seed: number;
   pairs: number;
@@ -78,11 +128,23 @@ export type Metric = {
   best_candidate_id: string;
 };
 export type Generation = {
+  neural_ranked?: NeuroSummary[];
+  replacements?: Replacement[];
   number: number;
   ranked: Candidate[];
   metric: Metric;
 };
 export type Job = {
+  hybrid_config?: HybridConfig;
+  neural_candidates?: NeuroSummary[];
+  replacements?: Replacement[];
+  population_progress?: {
+    phase: string;
+    training_done?: number[];
+    training_games: number;
+    selection_games: number;
+    total_budget: number;
+  };
   id: string;
   kind: "training" | "evaluation";
   name: string;
@@ -136,11 +198,15 @@ export const failure = (e: unknown) =>
 export const active = (x: Job) =>
   ["queued", "running", "stopping"].includes(x.state);
 export const algorithmName = (x: Job) =>
-  x.algorithm === "td-zero-v1"
-    ? "TD(0)"
-    : x.algorithm === "td-lambda-v1"
-      ? "TD(lambda)"
-      : "GA-linear";
+  x.algorithm === "ga-mlp-v1"
+    ? "GA-MLP"
+    : x.algorithm === "hybrid-sync-v1"
+      ? "Hybrid"
+      : x.algorithm === "td-zero-v1"
+        ? "TD(0)"
+        : x.algorithm === "td-lambda-v1"
+          ? "TD(lambda)"
+          : "GA-linear";
 export const jobPath = (kind: string) =>
   kind === "training" ? "/training/runs" : "/evaluations";
 export function useJob(path: string) {

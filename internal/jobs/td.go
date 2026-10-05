@@ -151,7 +151,7 @@ func (m *Manager) saveTD(ctx context.Context, r, next record, req SaveRequest) (
 
 func validateTDRecord(r record) error {
 	s := r.TDTraining
-	if r.Training != nil || r.FrozenEvaluation != nil || len(r.GenerationHashes) != s.Games || s.Config.Games > maxTDJobGames {
+	if r.NeuroTraining != nil || r.Training != nil || r.FrozenEvaluation != nil || len(r.GenerationHashes) != s.Games || s.Config.Games > maxTDJobGames {
 		return fmt.Errorf("invalid neural training archive references")
 	}
 	if err := training.ValidateTD(*s); err != nil {

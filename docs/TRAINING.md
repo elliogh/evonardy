@@ -1,7 +1,8 @@
 # Training and independent evaluation
 
-Training changes the nine coefficients of `long-nardy-features-v1`. Inference
-uses the existing frozen linear evaluator and Go legal actions. The ruleset,
+GA-linear changes the nine coefficients of `long-nardy-features-v1`. Neural
+GA-MLP, TD and Hybrid share the encoder, `56 → 32 → 1` float64 tanh network,
+fixed White win objective and frozen greedy inference policy. Go supplies legal actions. The ruleset,
 winning-action priority, and stable tie behavior are unchanged.
 
 ## Start, stop, and keep a candidate
@@ -114,7 +115,7 @@ mean signed points, and mars wins. Stopped batches have no aggregate result and
 can resume. Truncated batches fail with actual records and no aggregate result.
 My bots links to each model's latest completed independent result. Smoke batches
 verify execution and persistence, not playing strength. Confidence intervals,
-league comparisons, and Hybrid are later milestones.
+and league comparisons belong to M6.
 Charts contain saved generation metrics; candidates are promoted only by the user.
 
 ## Neural TD training
@@ -163,7 +164,7 @@ In **Training**, select **TD(0)** or **TD(lambda)** under **Training method**.
 Set Games, Seed, Learning rate (alpha), Exploration (epsilon), and, for traces,
 Trace decay (lambda). Advanced settings contains the per-game turn guard. The
 neural smoke preset uses four games; defaults and durable limits match the CLI.
-GA-only population/workers/variation controls are absent from the neural form.
+Population/workers/variation controls are absent from the TD form.
 **Stop and checkpoint** finishes the current bounded game; **Resume run** uses
 the exact saved configuration after restart.
 
@@ -195,3 +196,80 @@ Older checkpoints stay compatible; previously completed runs that did not record
 a preview have none. Resumable older runs capture new samples after resuming.
 Positions and legality remain authoritative in Go. A paused or hidden viewer never
 pauses the job, and watchers keep only a bounded current/latest pair of replays.
+
+## Neural populations: GA-MLP and Hybrid
+
+Select **GA-MLP** or **Hybrid** in Training. Both use the same encoder, network,
+reward and winning-action priority as TD. Their selection policy is frozen,
+greedy (epsilon=0) and maximizes White value / minimizes Black value. Selection
+uses the same fixed paired Heuristic/Random development seeds as GA-linear;
+independent evaluation uses a separate seed domain and never updates learners.
+
+```bash
+bin/evonardy train --algorithm ga-mlp --config configs/ga-mlp-smoke.json \
+  --data-dir ./data --save-name "My evolved neural bot"
+bin/evonardy train --algorithm hybrid --config configs/hybrid-smoke.json \
+  --data-dir ./data --save-name "My Hybrid bot"
+```
+
+GA-MLP (`ga-mlp-v1`) evolves all 1,857 parameters without gradients. Xavier-normal
+initial networks are scaled by `initial_sigma`; defaults are eight candidates,
+four generations, two pairs per opponent, elite fraction 0.1, tournament size 3,
+initial scale 1, mutation scale 0.02, two selection workers and 1200 turns. Stable
+ranking uses win/loss fitness, with mars recorded only as an auxiliary statistic.
+Elites copy weights. Every other child selects one tournament parent and adds
+independent Gaussian parameter mutations clamped to inference bounds ±1e6.
+There is no crossover. Counters record changed parameters, excluding initialization.
+The smoke preset evaluates two generations of four candidates: 32 selection games.
+
+Hybrid (`hybrid-sync-v1`) is synchronous PBT-like adaptation. Exactly eight
+participants own sequential TD(lambda) learners. Each round first trains every
+participant for `games_per_round` games, then evaluates frozen weight copies on
+the paired development schedule. The current implementation dispatches training
+games sequentially; `workers` bounds parallel selection only. Truncated training
+games bootstrap normally and have no terminal reward. Any truncated selection
+game fails the round without fitness or replacement.
+
+Between nonfinal rounds, the six highest ranked participants survive and the
+bottom two copy the **trained weights** of ranks one and two respectively.
+Survivors and replacements get fresh lineage IDs; immutable round archives record
+parents, replaced IDs, reasons and before/after hyperparameters. There is no
+crossover or neural-weight mutation. Alpha is multiplied by 0.8 or 1.2; epsilon
+and lambda change by ±0.02 and ±0.05 respectively, then clamp to explicit bounds.
+Defaults are alpha=0.001 within [0.00001,0.1], epsilon=0.05 within [0,0.3],
+lambda=0.7 within [0,0.95], four rounds, eight training games per participant per
+round, one pair per opponent and two selection workers. Bounds are configurable
+within [0,1], with strictly positive alpha minimum and min < max. Eligibility
+traces reset at every game boundary, including replacement and resume.
+The two-round smoke preset uses one training game per participant per round:
+16 training + 64 selection = 80 actual games, including discarded learners.
+
+Population details separate cumulative training and selection games, show current
+participant progress, and plot only complete selection rounds. Choose an evaluated
+generation and any candidate to save its frozen neural package. Historical Hybrid
+rounds also show replacement reasons and hyperparameter changes. Parameters stay
+private to archives/models; public summaries contain identity, lineage and fitness.
+The viewer samples real learner or selection games without running extra inference;
+Hybrid keys distinguish training and selection indices within each round.
+
+The random contract is `keyed-pcg-neuro-v1`: initialization uses the shared network
+initializer; selection/mutation and Hybrid hyperparameter adaptation have independent
+named PCG streams. A Hybrid training-game seed derives from run seed, round,
+participant slot and game index. Its TD opening, dice and exploration streams remain
+separate. Checkpoints retain this recipe, fixed opponents, all participant weights,
+hyperparameters, phase/progress, complete round metrics and all actual work.
+New population jobs record platform, Go runtime, configured workers, ruleset, encoder,
+network and random contract under `execution`. Same-platform worker counts and
+stop/reopen/resume reproduce results and parameters;
+cross-platform bitwise equivalence is not promised. Active wall time is measured;
+CPU time is not inferred from it.
+
+Stop/shutdown finishes one learner game or bounded selection wave. Every such
+boundary is checkpointed. Completed round archives are immutable and checksum
+verified before publication; archive-ahead crash recovery requires byte-identical
+reproduction. Published models never alias learners. Resume retains the entire
+configuration and participant progress. GA-MLP has the existing GA limits; Hybrid
+has 1–500 rounds, 1–1000 games per participant per round and the same overall
+200000-game / 200000000-turn-slot caps, counting both training and selection.
+Smoke/browser scenarios validate bounded execution, persistence and playable
+snapshots, not relative strength. M6 adds systematic method comparisons.

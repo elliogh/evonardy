@@ -8,6 +8,8 @@ import {
   failure,
   jobPath,
   tdDefaults,
+  hybridDefaults,
+  gaMLPDefaults,
   useJob,
 } from "./jobs";
 import type {
@@ -18,9 +20,13 @@ import type {
   Metric,
   TrainingConfig,
   TDConfig,
+  HybridConfig,
+  NeuroSummary,
 } from "./jobs";
 import { TrainingGame } from "./TrainingGame";
 import { NeuralSnapshot, TDChart } from "./NeuralTraining";
+
+const learningNumber = (n: number) => Number(n.toPrecision(6)).toString();
 
 function NumberField({
   label,
@@ -88,7 +94,7 @@ export function Jobs({
         </h1>
         <p className="intro">
           {kind === "training"
-            ? "Train through real games with GA-linear or neural TD learning. Save a strategy, test it independently, and play."
+            ? "Train through real games with GA-linear, GA-MLP, TD learning or Hybrid. Save a strategy, test it independently, and play."
             : "Paired games on fresh dice seeds. The selected model stays fixed throughout the evaluation."}
         </p>
       </section>
@@ -147,6 +153,7 @@ function TrainingForm() {
   const [cfg, setConfig] = useState<TrainingConfig>({ ...defaults });
   const [method, setMethod] = useState("ga-linear");
   const [td, setTD] = useState<Required<TDConfig>>({ ...tdDefaults });
+  const [hybrid, setHybrid] = useState<HybridConfig>({ ...hybridDefaults });
   const [name, setName] = useState("My first bot");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -182,12 +189,42 @@ function TrainingForm() {
       onChange={(n) => setTD((c) => ({ ...c, [key]: n }))}
     />
   );
-  const neural = method !== "ga-linear";
-  const methodName = neural
-    ? method === "td0"
-      ? "TD(0)"
-      : "TD(lambda)"
-    : "GA-linear";
+  const neural = method === "td0" || method === "td-lambda";
+  const hybridField = (
+    key:
+      | "seed"
+      | "rounds"
+      | "games_per_round"
+      | "pairs_per_opponent"
+      | "workers"
+      | "max_turns"
+      | "alpha"
+      | "epsilon"
+      | "lambda",
+    label: string,
+    min: number,
+    max: number,
+    step: number | "any" = 1,
+  ) => (
+    <NumberField
+      label={label}
+      value={hybrid[key]}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(n) => setHybrid((c) => ({ ...c, [key]: n }))}
+    />
+  );
+  const methodName =
+    method === "hybrid"
+      ? "Hybrid"
+      : method === "ga-mlp"
+        ? "GA-MLP"
+        : neural
+          ? method === "td0"
+            ? "TD(0)"
+            : "TD(lambda)"
+          : "GA-linear";
   return (
     <form
       className="lab-panel"
@@ -207,15 +244,20 @@ function TrainingForm() {
           const x = await api<Job>("/training/runs", "POST", {
             ...command(0),
             name,
-            ...(neural
-              ? {
-                  algorithm: method === "td0" ? "td-zero-v1" : "td-lambda-v1",
-                  td_config: {
-                    ...td,
-                    lambda: method === "td0" ? 0 : td.lambda,
-                  },
-                }
-              : { config: cfg }),
+            ...(method === "hybrid"
+              ? { algorithm: "hybrid-sync-v1", hybrid_config: hybrid }
+              : neural
+                ? {
+                    algorithm: method === "td0" ? "td-zero-v1" : "td-lambda-v1",
+                    td_config: {
+                      ...td,
+                      lambda: method === "td0" ? 0 : td.lambda,
+                    },
+                  }
+                : {
+                    config: cfg,
+                    ...(method === "ga-mlp" ? { algorithm: "ga-mlp-v1" } : {}),
+                  }),
           });
           window.location.hash = `/training/${x.id}`;
         } catch (e) {
@@ -234,14 +276,16 @@ function TrainingForm() {
           type="button"
           disabled={busy}
           onClick={() =>
-            neural
-              ? setTD({ ...tdDefaults, games: 4 })
-              : setConfig({
-                  ...defaults,
-                  population: 4,
-                  generations: 2,
-                  pairs_per_opponent: 1,
-                })
+            method === "hybrid"
+              ? setHybrid({ ...hybridDefaults, rounds: 2, games_per_round: 1 })
+              : neural
+                ? setTD({ ...tdDefaults, games: 4 })
+                : setConfig({
+                    ...(method === "ga-mlp" ? gaMLPDefaults : defaults),
+                    population: 4,
+                    generations: 2,
+                    pairs_per_opponent: 1,
+                  })
           }
         >
           Use smoke preset
@@ -250,8 +294,17 @@ function TrainingForm() {
       <fieldset disabled={busy} className="form-fields">
         <label className="wide">
           Training method
-          <select value={method} onChange={(e) => setMethod(e.target.value)}>
+          <select
+            value={method}
+            onChange={(e) => {
+              setMethod(e.target.value);
+              if (e.target.value === "ga-mlp") setConfig({ ...gaMLPDefaults });
+              if (e.target.value === "ga-linear") setConfig({ ...defaults });
+            }}
+          >
             <option value="ga-linear">GA-linear</option>
+            <option value="ga-mlp">GA-MLP</option>
+            <option value="hybrid">Hybrid</option>
             <option value="td0">TD(0)</option>
             <option value="td-lambda">TD(lambda)</option>
           </select>
@@ -265,7 +318,41 @@ function TrainingForm() {
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-        {neural ? (
+        {method === "hybrid" ? (
+          <>
+            {hybridField("seed", "Seed", 0, Number.MAX_SAFE_INTEGER)}
+            {hybridField("rounds", "Rounds", 1, 500)}
+            {hybridField(
+              "games_per_round",
+              "Training games per participant per round",
+              1,
+              1000,
+            )}
+            {hybridField("pairs_per_opponent", "Pairs per opponent", 1, 32)}
+            {hybridField("workers", "Selection workers", 1, 8)}
+            {hybridField(
+              "alpha",
+              "Learning rate (alpha)",
+              hybrid.alpha_bounds.min,
+              hybrid.alpha_bounds.max,
+              "any",
+            )}
+            {hybridField(
+              "epsilon",
+              "Exploration (epsilon)",
+              hybrid.epsilon_bounds.min,
+              hybrid.epsilon_bounds.max,
+              "any",
+            )}
+            {hybridField(
+              "lambda",
+              "Trace decay (lambda)",
+              hybrid.lambda_bounds.min,
+              hybrid.lambda_bounds.max,
+              "any",
+            )}
+          </>
+        ) : neural ? (
           <>
             {tdField("seed", "Seed", 0, Number.MAX_SAFE_INTEGER)}
             {tdField("games", "Games", 1, 10000)}
@@ -287,7 +374,31 @@ function TrainingForm() {
       <details>
         <summary>Advanced settings</summary>
         <fieldset disabled={busy} className="form-fields">
-          {neural ? (
+          {method === "hybrid" ? (
+            <>
+              {hybridField("max_turns", "Turn limit per game", 1, 10000)}
+              {(
+                ["alpha_bounds", "epsilon_bounds", "lambda_bounds"] as const
+              ).map((key) =>
+                (["min", "max"] as const).map((edge) => (
+                  <NumberField
+                    key={`${key}-${edge}`}
+                    label={`${key.split("_")[0]} ${edge}`}
+                    value={hybrid[key][edge]}
+                    min={key === "alpha_bounds" ? 0.000001 : 0}
+                    max={1}
+                    step="any"
+                    onChange={(n) =>
+                      setHybrid((c) => ({
+                        ...c,
+                        [key]: { ...c[key], [edge]: n },
+                      }))
+                    }
+                  />
+                )),
+              )}
+            </>
+          ) : neural ? (
             tdField("max_turns", "Turn limit per game", 1, 10000)
           ) : (
             <>
@@ -301,7 +412,9 @@ function TrainingForm() {
         </fieldset>
       </details>
       <p className="muted">
-        {neural ? (
+        {method === "hybrid" ? (
+          `${hybrid.rounds * 8 * hybrid.games_per_round} training games + ${hybrid.rounds * 8 * hybrid.pairs_per_opponent * 4} frozen selection games. Eight sequential TD learners; after each selection round, two lowest ranked participants copy trained leaders and vary their learning settings. Turn-limited selection fails the run.`
+        ) : neural ? (
           `${td.games.toLocaleString("en")} self-play games. One sequential learner updates after every turn. Turn-limited games have no terminal result. Save a frozen snapshot to evaluate it independently.`
         ) : (
           <>
@@ -629,20 +742,30 @@ function JobDetail({
             {kind === "training" && (
               <div>
                 <small>
-                  {x.td_config ? "Game checkpoints" : "Generations"}
+                  {x.hybrid_config
+                    ? "Rounds"
+                    : x.td_config
+                      ? "Game checkpoints"
+                      : "Generations"}
                 </small>
                 <strong>
                   {x.generation} /{" "}
-                  {x.config?.generations ?? x.generation_budget}
+                  {x.hybrid_config?.rounds ??
+                    x.config?.generations ??
+                    x.generation_budget}
                 </strong>
                 <span>
                   {x.state === "completed"
-                    ? x.td_config
-                      ? "All game boundaries saved"
-                      : "All generations evaluated"
-                    : x.td_config
-                      ? "Saved after each game"
-                      : `${x.generation_games} / ${x.generation_budget} games in current generation`}
+                    ? x.hybrid_config
+                      ? "All rounds evaluated"
+                      : x.td_config
+                        ? "All game boundaries saved"
+                        : "All generations evaluated"
+                    : x.hybrid_config
+                      ? `Round phase: ${x.population_progress?.phase}. ${x.generation_games} / ${x.generation_budget} selection games`
+                      : x.td_config
+                        ? "Saved after each game"
+                        : `${x.generation_games} / ${x.generation_budget} games in current generation`}
                 </span>
               </div>
             )}
@@ -659,17 +782,19 @@ function JobDetail({
               <strong>{x.wall_seconds.toFixed(1)}s</strong>
               <span>
                 {kind === "training"
-                  ? x.td_config
-                    ? "Sequential self-play"
-                    : `${x.counters.mutations} mutations · ${x.counters.crossovers} crossovers`
+                  ? x.hybrid_config
+                    ? "Measured training and selection"
+                    : x.td_config
+                      ? "Sequential self-play"
+                      : `${x.counters.mutations} mutations · ${x.counters.crossovers} crossovers`
                   : `${x.generation_games} / ${x.generation_budget} games`}
               </span>
             </div>
           </div>
-          {x.td_config && (
+          {(x.td_config || x.hybrid_config) && (
             <p className="notice" data-updates={x.counters.updates ?? 0}>
               {(x.counters.updates ?? 0).toLocaleString("en")} TD updates · One
-              update per full turn
+              update per learner turn
             </p>
           )}
           <progress
@@ -677,12 +802,43 @@ function JobDetail({
             value={kind === "training" ? x.counters.games : x.generation_games}
             max={
               kind === "training"
-                ? (x.config?.generations ?? 1) * x.generation_budget
+                ? (x.population_progress?.total_budget ??
+                  (x.config?.generations ?? 1) * x.generation_budget)
                 : x.generation_budget
             }
           />
           {kind === "training" ? (
             <>
+              {x.population_progress && (
+                <section className="lab-panel" aria-label="Population progress">
+                  <h2>
+                    {x.hybrid_config ? "Hybrid population" : "Neural evolution"}
+                  </h2>
+                  <p>
+                    {x.population_progress.training_games} training games ·{" "}
+                    {x.population_progress.selection_games} selection games ·
+                    Phase: {x.population_progress.phase}
+                  </p>
+                  {x.hybrid_config && (
+                    <>
+                      <p>
+                        Eight participants. All work includes discarded
+                        learners. Frozen selection never updates their weights.
+                      </p>
+                      <div className="weights">
+                        {x.population_progress.training_done?.map((n, i) => (
+                          <span key={i}>
+                            Participant {i + 1}
+                            <strong>
+                              {n} / {x.hybrid_config!.games_per_round} games
+                            </strong>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </section>
+              )}
               <TrainingGame job={x} />
               {x.td_config ? (
                 <>
@@ -712,7 +868,10 @@ function JobDetail({
             <summary>Run settings</summary>
             <pre>
               {JSON.stringify(
-                x.config ?? x.td_config ?? x.evaluation?.config,
+                x.hybrid_config ??
+                  x.config ??
+                  x.td_config ??
+                  x.evaluation?.config,
                 null,
                 2,
               )}
@@ -732,9 +891,17 @@ function Candidates({ x, refresh }: { x: Job; refresh: () => Promise<void> }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Bot | null>(null);
   const [busy, setBusy] = useState(false);
-  const candidates = generation === 0 ? x.candidates : (archive?.ranked ?? []);
+  const candidates: (Candidate | NeuroSummary)[] = x.population_progress
+    ? generation === 0
+      ? (x.neural_candidates ?? [])
+      : (archive?.neural_ranked ?? [])
+    : generation === 0
+      ? x.candidates
+      : (archive?.ranked ?? []);
+  const replacements =
+    (generation === 0 ? x.replacements : archive?.replacements) ?? [];
   const gen = generation || x.generation;
-  const candidate: Candidate | undefined =
+  const candidate: Candidate | NeuroSummary | undefined =
     candidates.find((c) => c.id === selected) ?? candidates[0];
   useEffect(() => {
     let alive = true;
@@ -811,29 +978,47 @@ function Candidates({ x, refresh }: { x: Job; refresh: () => Promise<void> }) {
                 mean points in development games. Save this candidate to run an
                 independent evaluation.
               </p>
-              <details>
-                <summary>Nine frozen weights</summary>
-                <div className="weights">
-                  {candidate.weights.map((w, i) => (
-                    <span key={i}>
-                      {
-                        [
-                          "Pip",
-                          "Head",
-                          "Home",
-                          "Off",
-                          "Occupied",
-                          "Block",
-                          "Distribution",
-                          "Rear",
-                          "Mobility",
-                        ][i]
-                      }
-                      <strong>{w.toFixed(4)}</strong>
-                    </span>
-                  ))}
+              {"weights" in candidate ? (
+                <details>
+                  <summary>Nine frozen weights</summary>
+                  <div className="weights">
+                    {candidate.weights.map((w, i) => (
+                      <span key={i}>
+                        {
+                          [
+                            "Pip",
+                            "Head",
+                            "Home",
+                            "Off",
+                            "Occupied",
+                            "Block",
+                            "Distribution",
+                            "Rear",
+                            "Mobility",
+                          ][i]
+                        }
+                        <strong>{w.toFixed(4)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <div>
+                  <p>
+                    Parents: {candidate.parents.join(", ") || "initial network"}{" "}
+                    · {candidate.reason}
+                  </p>
+                  {candidate.hyperparameters && (
+                    <p>
+                      alpha {learningNumber(candidate.hyperparameters.alpha)} ·
+                      epsilon{" "}
+                      {learningNumber(candidate.hyperparameters.epsilon)} ·
+                      lambda {learningNumber(candidate.hyperparameters.lambda)}
+                    </p>
+                  )}
+                  <p>Frozen network: 56 → 32 → 1, 1,857 parameters.</p>
                 </div>
-              </details>
+              )}
               <form
                 className="name-form"
                 onSubmit={async (e) => {
@@ -884,6 +1069,22 @@ function Candidates({ x, refresh }: { x: Job; refresh: () => Promise<void> }) {
         <p className="alert" role="alert">
           {error}
         </p>
+      )}
+      {replacements.length > 0 && (
+        <div aria-label="Participant replacements">
+          <h3>Participant replacements</h3>
+          {replacements.map((r) => (
+            <p key={r.child_id}>
+              {r.child_id} copied {r.parent_id}, replacing {r.replaced_id}:{" "}
+              {r.reason}. alpha {learningNumber(r.before.alpha)} →{" "}
+              {learningNumber(r.after.alpha)}; epsilon{" "}
+              {learningNumber(r.before.epsilon)} →{" "}
+              {learningNumber(r.after.epsilon)}; lambda{" "}
+              {learningNumber(r.before.lambda)} →{" "}
+              {learningNumber(r.after.lambda)}.
+            </p>
+          ))}
+        </div>
       )}
       {notice && (
         <p className="notice" role="status">
