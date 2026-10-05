@@ -115,6 +115,12 @@ go run ./cmd/evonardy replay --file ./data/replays/<run-id>/game-0000.json
 Replays store actual dice and full actions, including the opening roll.
 Verification does not require bots or repeat historical move selection.
 
+To refine an existing linear bot, choose **Training → GA-linear → Start from saved
+bot → ev1**, then set the new run's budget. The source stays immutable; a saved
+child is a candidate until independently evaluated. See the
+[saved-bot workflow](docs/TRAINING.md#start-ga-linear-from-a-saved-bot) and
+`configs/ga-linear-refine.json` for an explicit 30720-game example.
+
 ## Rules and checks
 
 GitHub Actions runs the full validation suite on every pull request to `main`,
@@ -139,7 +145,7 @@ methods and lifecycle. The bounded neural presets run four games each.
 
 ```bash
 make test    # gofmt check, vet, Go tests + race, frontend typecheck/test/build
-make smoke   # baselines/replays + 32 GA and 8 TD games, frozen saves, 24 evaluation games
+make smoke   # baselines/replays + bounded training, frozen saves and evaluation
 make bench   # move generation, evaluation, simulation; measured time and allocations
 cd web && npx playwright install chromium
 cd .. && make e2e  # real local server; temporary data; full browser game and restart
@@ -167,7 +173,8 @@ complete game against the saved neural model. Watching or playing leaves learner
 streams and published weights unchanged. M5 adds two population scenarios: archived
 GA-MLP/Hybrid candidate saves, lineage and replacement inspection, restart, independent
 evaluation, stopped/resumed learning, and immutable neural play. The suite contains
-nine real browser scenarios. M6 adds a real five-seed, three-method experiment,
+ten real browser scenarios. Saved-source GA-linear adds exact source copying,
+three-opponent budgets, immutable descendant lineage and restart checks. M6 adds a real five-seed, three-method experiment,
 checks every plotted budget against the server, downloads and hashes the immutable
 report, and verifies the selected candidate and final verdict after restart.
 

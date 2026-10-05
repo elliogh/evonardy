@@ -139,6 +139,19 @@ Mixed configurations and mismatching/unknown algorithm names return 400. Neural
 presets are `configs/td-zero-smoke.json` and `configs/td-lambda-smoke.json`;
 resource/update/random contracts are in [TD.md](TD.md).
 
+Saved-source GA-linear requests add `source_bot_id:"<saved-linear-id>"` to the
+normal GA request. Algorithm may be omitted, `ga-linear-v1`, or explicitly
+`ga-linear-from-model-v1` with a source. The server freezes a compatible saved
+linear model before queuing; missing, random, neural and virtual sources return
+400. A source with TD/GA-MLP/Hybrid is also rejected. Source fields participate in
+the creation fingerprint, so reusing a command with another source returns 409.
+
+These snapshots expose `algorithm:"ga-linear-from-model-v1"`, `source_bot_id`,
+and `source_model_sha256`. Generation archives include `source_bot_id`. Their
+budgets charge three opponents and their paired dice change with each generation;
+see [the saved-bot contract](TRAINING.md#start-ga-linear-from-a-saved-bot).
+Existing creation payloads and checkpoint schedules remain unchanged.
+
 TD snapshots have `config:null`, their versioned `algorithm`, `td_config`,
 `td_history` (one actual metric per committed game), and, after the first game,
 `neural_candidate:{id:"td-game-000001",game:1}` for the latest checkpoint.

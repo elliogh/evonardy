@@ -6,6 +6,13 @@ cat .cache/smoke-training-result.json
 bot_id=$(node -p 'JSON.parse(require("node:fs").readFileSync(".cache/smoke-training-result.json", "utf8")).saved_bot.id')
 go run ./cmd/evonardy evaluate --config configs/evaluation-smoke.json --bot "$bot_id" --data-dir .cache/smoke-training
 
+source_bot_id="$bot_id"
+source_result=".cache/smoke-training-from-model.json"
+go run ./cmd/evonardy train --config configs/ga-linear-smoke.json --source-bot "$source_bot_id" --data-dir .cache/smoke-training --save-name "Saved-source smoke" > "$source_result"
+cat "$source_result"
+bot_id=$(node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const x=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),id=process.argv[2]; const sha=crypto.createHash("sha256").update(fs.readFileSync(`.cache/smoke-training/bots/${id}/model.json`)).digest("hex"); if(x.state!=="completed" || x.algorithm!=="ga-linear-from-model-v1" || x.source_bot_id!==id || x.source_model_sha256!==sha || x.counters.games!==48 || x.generation_budget!==24 || x.saved_bot.kind!=="linear") throw Error("incomplete saved-source smoke or changed source"); process.stdout.write(x.saved_bot.id)' "$source_result" "$source_bot_id")
+go run ./cmd/evonardy evaluate --config configs/evaluation-smoke.json --bot "$bot_id" --data-dir .cache/smoke-training
+
 for method in td0 td-lambda; do
   td_config=configs/td-zero-smoke.json
   if [[ "$method" == td-lambda ]]; then

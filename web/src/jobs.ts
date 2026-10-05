@@ -135,6 +135,8 @@ export type Generation = {
   metric: Metric;
 };
 export type Job = {
+  source_bot_id?: string;
+  source_model_sha256?: string;
   hybrid_config?: HybridConfig;
   neural_candidates?: NeuroSummary[];
   replacements?: Replacement[];

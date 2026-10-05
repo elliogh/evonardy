@@ -41,6 +41,7 @@ var ErrConflict = library.ErrConflict
 var ErrNotFound = errors.New("job not found")
 
 type StartRequest struct {
+	SourceBotID  string                 `json:"source_bot_id,omitempty"`
 	HybridConfig *training.HybridConfig `json:"hybrid_config,omitempty"`
 	library.Command
 	Name      string             `json:"name"`
@@ -96,6 +97,8 @@ type Publication struct {
 	CandidateID string `json:"candidate_id"`
 }
 type Snapshot struct {
+	SourceBotID        string                  `json:"source_bot_id,omitempty"`
+	SourceModelSHA256  string                  `json:"source_model_sha256,omitempty"`
 	Execution          *ExecutionInfo          `json:"execution,omitempty"`
 	HybridConfig       *training.HybridConfig  `json:"hybrid_config,omitempty"`
 	PopulationProgress *PopulationProgress     `json:"population_progress,omitempty"`
@@ -253,6 +256,11 @@ func syncSnapshot(r *record) {
 	}
 	if r.Training != nil {
 		st := r.Training
+		if st.Source != nil {
+			r.Algorithm = st.Algorithm
+			r.SourceBotID = st.Source.Policy.ID
+			r.SourceModelSHA256 = st.Source.ModelSHA256
+		}
 		c := st.Config
 		r.Config = &c
 		r.Generation = st.Generation
@@ -393,6 +401,9 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (Snapshot, error)
 		return Snapshot{}, fmt.Errorf("%w: invalid run name, command, or capacity", ErrInvalid)
 	}
 	r := initial(req.CommandID, Training, strings.TrimSpace(req.Name), fp)
+	if req.SourceBotID != "" && (req.TDConfig != nil || req.HybridConfig != nil || (req.Algorithm != "" && req.Algorithm != training.Algorithm && req.Algorithm != training.FromModelAlgorithm)) {
+		return Snapshot{}, fmt.Errorf("%w: saved-source training supports GA-linear only", ErrInvalid)
+	}
 	if req.HybridConfig != nil || req.Algorithm == training.GAMLPAlgorithm {
 		if req.TDConfig != nil || (req.HybridConfig != nil && (req.Config != (training.Config{}) || req.Algorithm != training.HybridAlgorithm)) {
 			return Snapshot{}, fmt.Errorf("%w: incompatible population configuration", ErrInvalid)
@@ -419,10 +430,24 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (Snapshot, error)
 		}
 		r.TDTraining = &st
 	} else {
-		if req.Algorithm != "" && req.Algorithm != training.Algorithm {
+		if req.Algorithm != "" && req.Algorithm != training.Algorithm && !(req.Algorithm == training.FromModelAlgorithm && req.SourceBotID != "") {
 			return Snapshot{}, fmt.Errorf("%w: unsupported training algorithm", ErrInvalid)
 		}
-		st, err := training.New(req.Config)
+		var st training.State
+		var err error
+		if req.SourceBotID == "" {
+			st, err = training.New(req.Config)
+		} else {
+			detail, e := m.bots.Get(req.SourceBotID)
+			if e != nil || detail.Manifest == nil || detail.Kind != "linear" {
+				return Snapshot{}, fmt.Errorf("%w: source must be an available saved linear model", ErrInvalid)
+			}
+			policy, e := m.bots.Freeze(req.SourceBotID)
+			if e != nil {
+				return Snapshot{}, fmt.Errorf("%w: invalid source: %v", ErrInvalid, e)
+			}
+			st, err = training.NewFromModel(req.Config, training.LinearSource{Policy: policy, ModelSHA256: detail.Manifest.ModelSHA256})
+		}
 		if err != nil {
 			return Snapshot{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 		}
@@ -588,7 +613,11 @@ func (m *Manager) Save(ctx context.Context, id string, req SaveRequest) (library
 	if err := ctx.Err(); err != nil {
 		return library.Card{}, err
 	}
-	card, err := m.bots.SaveLinear(req.Name, candidate.Weights[:], fmt.Sprintf("GA-linear run %s, generation %d", id, req.Generation), id+"/"+candidate.ID)
+	source := fmt.Sprintf("GA-linear run %s, generation %d", id, req.Generation)
+	if r.Training.Source != nil {
+		source += fmt.Sprintf(", trained from %s (model SHA-256 %s)", r.Training.Source.Policy.ID, r.Training.Source.ModelSHA256)
+	}
+	card, err := m.bots.SaveLinear(req.Name, candidate.Weights[:], source, id+"/"+candidate.ID)
 	if err != nil {
 		return library.Card{}, err
 	}
@@ -613,7 +642,7 @@ func (m *Manager) generation(r record, n int) (training.Generation, error) {
 	if err := library.DecodeJSON(data, &gen); err != nil {
 		return gen, err
 	}
-	if gen.Number != n || gen.Algorithm != training.Algorithm || gen.Ruleset != game.Ruleset || gen.FeaturesVersion != features.Version {
+	if gen.Number != n || gen.Algorithm != r.Training.Algorithm || gen.Ruleset != game.Ruleset || gen.FeaturesVersion != features.Version || gen.SourceBotID != r.SourceBotID {
 		return gen, fmt.Errorf("incompatible generation archive")
 	}
 	return gen, nil
@@ -889,6 +918,13 @@ func validate(r record) error {
 		}
 		if err := training.Validate(*r.Training); err != nil {
 			return err
+		}
+		if r.Training.Source == nil {
+			if r.SourceBotID != "" || r.SourceModelSHA256 != "" {
+				return fmt.Errorf("unexpected linear source provenance")
+			}
+		} else if r.SourceBotID != r.Training.Source.Policy.ID || r.SourceModelSHA256 != r.Training.Source.ModelSHA256 || r.Algorithm != r.Training.Algorithm {
+			return fmt.Errorf("linear source provenance mismatch")
 		}
 		if err := validateWatch(r); err != nil {
 			return err

@@ -68,10 +68,10 @@ func validateWatch(r record) error {
 	if g.Generation < 1 || g.Generation > c.Generations || g.Generation < r.Training.Generation || g.Generation > r.Training.Generation+1 || g.Index < 0 || g.Index >= training.Slots(*r.Training) || !g.CandidateSide.Valid() {
 		return fmt.Errorf("invalid watched match identity")
 	}
-	perCandidate := c.PairsPerOpponent * 4
+	perCandidate := training.GamesPerCandidate(*r.Training)
 	opponent := (g.Index % perCandidate) / (c.PairsPerOpponent * 2)
 	pair := (g.Index / 2) % c.PairsPerOpponent
-	if g.CandidateSide != game.Player(g.Index%2) || g.CandidateID != fmt.Sprintf("g%04d-c%04d", g.Generation-1, g.Index/perCandidate) || g.OpponentID != r.Training.Development[opponent].ID || g.Replay.Bots[g.CandidateSide] != g.CandidateID || g.Replay.Bots[g.CandidateSide.Other()] != g.OpponentID || g.Replay.GameID != uint64(g.Index) || g.Replay.Seed != training.PairSeed(c.Seed, "ga/development", opponent, pair) || g.Replay.MaxTurns != c.MaxTurns {
+	if g.CandidateSide != game.Player(g.Index%2) || g.CandidateID != fmt.Sprintf("g%04d-c%04d", g.Generation-1, g.Index/perCandidate) || g.OpponentID != training.SelectionOpponent(*r.Training, opponent).ID || g.Replay.Bots[g.CandidateSide] != g.CandidateID || g.Replay.Bots[g.CandidateSide.Other()] != g.OpponentID || g.Replay.GameID != uint64(g.Index) || g.Replay.Seed != training.SelectionPairSeed(*r.Training, g.Generation-1, opponent, pair) || g.Replay.MaxTurns != c.MaxTurns {
 		return fmt.Errorf("watched match schedule mismatch")
 	}
 	if r.WatchedGame == nil || *r.WatchedGame != *gameNotice(g) {

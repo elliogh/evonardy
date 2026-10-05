@@ -30,6 +30,7 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	algorithm := flags.String("algorithm", "ga-linear", "training method: ga-linear, ga-mlp, td0, td-lambda, hybrid")
 	runID := flags.String("run", "", "interrupted or stopped job ID")
 	botID := flags.String("bot", "", "frozen model ID")
+	sourceBotID := flags.String("source-bot", "", "saved linear model to initialize a new GA-linear run")
 	saveName := flags.String("save-name", "", "save the final neural snapshot or best final GA candidate")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -39,6 +40,9 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected job arguments")
+	}
+	if *sourceBotID != "" && (kind != "train" || *algorithm != "ga-linear") {
+		return fmt.Errorf("--source-bot requires train --algorithm ga-linear")
 	}
 	if (kind == "train" && *config == "") || (kind == "resume" && *runID == "") || (kind == "evaluate" && *botID == "") {
 		return fmt.Errorf("train requires --config; resume requires --run; evaluate requires --bot")
@@ -120,7 +124,7 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	var x jobs.Snapshot
 	switch kind {
 	case "train":
-		req := jobs.StartRequest{Command: cmd, Name: *name, Config: cfg}
+		req := jobs.StartRequest{Command: cmd, Name: *name, Config: cfg, SourceBotID: *sourceBotID}
 		if *algorithm == "ga-mlp" {
 			req.Algorithm = training.GAMLPAlgorithm
 		} else if *algorithm == "hybrid" {
