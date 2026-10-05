@@ -103,13 +103,16 @@ type Metric struct {
 	ForwardEvaluations uint64  `json:"forward_evaluations"`
 }
 type Generation struct {
-	Algorithm       string      `json:"algorithm"`
-	Ruleset         string      `json:"ruleset"`
-	FeaturesVersion string      `json:"features_version"`
-	Number          int         `json:"number"`
-	Ranked          []Candidate `json:"ranked"`
-	Scores          []Score     `json:"scores"`
-	Metric          Metric      `json:"metric"`
+	NeuralRanked     []NeuroSummary `json:"neural_ranked,omitempty"`
+	Replacements     []Replacement  `json:"replacements,omitempty"`
+	TrainingCounters Counters       `json:"training_counters,omitzero"`
+	Algorithm        string         `json:"algorithm"`
+	Ruleset          string         `json:"ruleset"`
+	FeaturesVersion  string         `json:"features_version"`
+	Number           int            `json:"number"`
+	Ranked           []Candidate    `json:"ranked"`
+	Scores           []Score        `json:"scores"`
+	Metric           Metric         `json:"metric"`
 }
 type State struct {
 	Version         int             `json:"version"`

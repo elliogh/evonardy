@@ -20,7 +20,7 @@ snapshots; SSE carries small change notifications. Frontend types are in
 | POST | `/api/games/{id}/turn` | Confirm `{command_id, expected_version, turn:{steps:[...]}}` |
 | GET | `/api/games/{id}/events` | SSE `game.updated` with `{game_id, version}` |
 | GET | `/api/replays/{id}` | Completed replay download; unfinished games return 409 |
-| GET / POST | `/api/training/runs` | Run summaries / start with GA `config` or neural `td_config` (see below) |
+| GET / POST | `/api/training/runs` | Run summaries / start with GA `config`, TD `td_config` or Hybrid `hybrid_config` (see below) |
 | GET | `/api/training/runs/{id}` | Durable training snapshot |
 | POST | `/api/training/runs/{id}/stop` or `/resume` | `{command_id, expected_version}`; checkpoint or continue |
 | POST | `/api/training/runs/{id}/save-bot` | `{command_id, expected_version, generation, candidate_id, name}`; immutable bot card |
@@ -132,14 +132,14 @@ configs are in `configs/ga-linear-smoke.json` and `configs/evaluation-smoke.json
 Requests require a complete config; the CLI additionally merges config defaults.
 
 GA requests retain `{command_id, expected_version:0, name, config}` unchanged;
-optional `algorithm:"ga-linear-v1"` is accepted. Neural requests omit GA `config`
+optional `algorithm:"ga-linear-v1"` is accepted. TD requests omit GA `config`
 and supply `td_config:{seed,games,max_turns,alpha,epsilon,lambda?}` instead, with
 optional `algorithm:"td-zero-v1"` (lambda=0) or `"td-lambda-v1"` (lambda>0).
 Mixed configurations and mismatching/unknown algorithm names return 400. Neural
 presets are `configs/td-zero-smoke.json` and `configs/td-lambda-smoke.json`;
 resource/update/random contracts are in [TD.md](TD.md).
 
-Neural snapshots have `config:null`, their versioned `algorithm`, `td_config`,
+TD snapshots have `config:null`, their versioned `algorithm`, `td_config`,
 `td_history` (one actual metric per committed game), and, after the first game,
 `neural_candidate:{id:"td-game-000001",game:1}` for the latest checkpoint.
 `generation` is the committed game index, `generation_games` is the cumulative
@@ -148,7 +148,7 @@ there are no GA candidates/fitness/history. `counters.updates` records actual TD
 updates and is omitted when zero for legacy compatibility. The shared save route
 uses `generation:<game-index>` and matching `candidate_id:"td-game-NNNNNN"` to
 publish any completed game checkpoint. The GA generation GET route is inapplicable
-to neural runs and returns 400. Public responses never include neural parameters,
+to TD runs and returns 400. Public responses never include neural parameters,
 private learner state, random internals, archive hashes, or command receipts.
 
 A job's `version` increments only for accepted user controls: creation, stop,
@@ -221,3 +221,38 @@ remains small and throttled; slow/disconnected viewers do not backpressure the
 scheduler. Playback cursors are transient and restart from the opening position
 when the page reloads. Watching preserves the training budget, RNGs, scores,
 selection, control versions, and work counters.
+
+## Neural population jobs
+
+GA-MLP start requests use `algorithm:"ga-mlp-v1"` and the GA `config` schema.
+Hybrid requests use `algorithm:"hybrid-sync-v1"` and `hybrid_config` matching
+`configs/hybrid-smoke.json`, omitting both GA `config` and `td_config`. Hybrid has
+exactly eight participants. Unknown, mixed or out-of-bounds configurations return 400. The CLI merges method-specific defaults before invoking the same manager.
+
+New population jobs also expose `execution` metadata with recorded platform, Go runtime,
+workers, ruleset, encoder, network and random contract. Older checkpoints without
+this optional field stay loadable. Population snapshots identify their versioned algorithm and include
+`population_progress:{phase,training_done?,training_games,selection_games,total_budget}`.
+Hybrid exposes `hybrid_config` with `config:null`; GA-MLP exposes `config`.
+`generation` counts completed selection generations/rounds; `generation_games`
+counts selection results in the current round and `generation_budget` is that
+round's selection budget. Training progress is separately counted per participant.
+`history` retains complete selection metrics. `neural_candidates` summarizes the
+last evaluated population with ID, parents, reason, stats and (Hybrid) hyperparameters.
+`replacements` describes copies made after that evaluated round; the final round
+has no replacements. Lists omit candidates and replacement arrays.
+
+The existing generation GET route returns `ranked:[]`, `neural_ranked` summaries,
+actual scores, selection metric, Hybrid `training_counters` and `replacements`.
+It never returns private parameters. Save uses the selected evaluated archive's
+`generation` and `candidate_id` and publishes a regular immutable neural model.
+Even while later participants train, a saved archive retains its evaluated weights.
+Older GA-linear and TD request/checkpoint/model formats remain compatible.
+
+Population watch notices use round/generation plus an index unique within that
+round. Hybrid training indices cover 0..(8*games_per_round-1), with both participant
+IDs equal to the live learner. Selection indices start at 8*games_per_round; replay
+GameID remains the selection schedule's original zero-based index. Sampled training
+replays use their independently derived seed, while selection replays use the fixed
+paired seed schedule. Stop/resume, idempotency, envelope checksums and independent
+evaluation contracts are shared with the existing queue.

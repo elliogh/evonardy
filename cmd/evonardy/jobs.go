@@ -27,7 +27,7 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	dir := flags.String("data-dir", "./data", "exclusive application directory")
 	config := flags.String("config", "", "JSON config; required for train")
 	name := flags.String("name", "GA-linear experiment", "training display name")
-	algorithm := flags.String("algorithm", "ga-linear", "training method: ga-linear, td0, td-lambda")
+	algorithm := flags.String("algorithm", "ga-linear", "training method: ga-linear, ga-mlp, td0, td-lambda, hybrid")
 	runID := flags.String("run", "", "interrupted or stopped job ID")
 	botID := flags.String("bot", "", "frozen model ID")
 	saveName := flags.String("save-name", "", "save the final neural snapshot or best final GA candidate")
@@ -45,10 +45,14 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	}
 	cfg := training.DefaultConfig()
 	td := training.DefaultTDConfig()
+	hybrid := training.DefaultHybridConfig()
+	if *algorithm == "ga-mlp" {
+		cfg = training.DefaultGAMLPConfig()
+	}
 	if *algorithm == "td-lambda" {
 		td = training.DefaultTDLambdaConfig()
 	}
-	if *algorithm != "ga-linear" && *algorithm != "td0" && *algorithm != "td-lambda" {
+	if *algorithm != "ga-linear" && *algorithm != "ga-mlp" && *algorithm != "hybrid" && *algorithm != "td0" && *algorithm != "td-lambda" {
 		return fmt.Errorf("unknown training algorithm")
 	}
 	if kind != "train" && *algorithm != "ga-linear" {
@@ -59,7 +63,9 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 		var value any = &cfg
 		if kind == "evaluate" {
 			value = &ec
-		} else if *algorithm != "ga-linear" {
+		} else if *algorithm == "hybrid" {
+			value = &hybrid
+		} else if *algorithm != "ga-linear" && *algorithm != "ga-mlp" {
 			value = &td
 		}
 		if kind == "resume" {
@@ -70,8 +76,12 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 		}
 	}
 	if kind == "train" {
-		if *algorithm == "ga-linear" {
+		if *algorithm == "ga-linear" || *algorithm == "ga-mlp" {
 			if err := cfg.Validate(); err != nil {
+				return err
+			}
+		} else if *algorithm == "hybrid" {
+			if err := hybrid.Validate(); err != nil {
 				return err
 			}
 		} else {
@@ -111,11 +121,20 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 	switch kind {
 	case "train":
 		req := jobs.StartRequest{Command: cmd, Name: *name, Config: cfg}
-		if *algorithm != "ga-linear" {
+		if *algorithm == "ga-mlp" {
+			req.Algorithm = training.GAMLPAlgorithm
+		} else if *algorithm == "hybrid" {
+			req.Config = training.Config{}
+			req.Algorithm = training.HybridAlgorithm
+			req.HybridConfig = &hybrid
+		} else if *algorithm != "ga-linear" {
 			req.Config, req.TDConfig, req.Algorithm = training.Config{}, &td, td.Algorithm()
 			if *name == "GA-linear experiment" {
 				req.Name = *algorithm + " experiment"
 			}
+		}
+		if *algorithm != "ga-linear" && *name == "GA-linear experiment" {
+			req.Name = *algorithm + " experiment"
 		}
 		x, err = m.Start(ctx, req)
 	case "evaluate":
@@ -149,6 +168,8 @@ func jobCommand(ctx context.Context, kind string, args []string, out io.Writer) 
 		candidateID := ""
 		if result.NeuralCandidate != nil {
 			candidateID = result.NeuralCandidate.ID
+		} else if len(result.NeuralCandidates) > 0 {
+			candidateID = result.NeuralCandidates[0].ID
 		} else if len(result.Candidates) > 0 {
 			candidateID = result.Candidates[0].ID
 		}

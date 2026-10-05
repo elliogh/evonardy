@@ -41,6 +41,7 @@ var ErrConflict = library.ErrConflict
 var ErrNotFound = errors.New("job not found")
 
 type StartRequest struct {
+	HybridConfig *training.HybridConfig `json:"hybrid_config,omitempty"`
 	library.Command
 	Name      string             `json:"name"`
 	Config    training.Config    `json:"config"`
@@ -95,31 +96,36 @@ type Publication struct {
 	CandidateID string `json:"candidate_id"`
 }
 type Snapshot struct {
-	ID               string               `json:"id"`
-	Kind             string               `json:"kind"`
-	Name             string               `json:"name"`
-	Version          uint64               `json:"version"`
-	Revision         uint64               `json:"revision"`
-	State            string               `json:"state"`
-	CreatedAt        string               `json:"created_at"`
-	UpdatedAt        string               `json:"updated_at"`
-	Error            string               `json:"error"`
-	CanResume        bool                 `json:"can_resume"`
-	Config           *training.Config     `json:"config"`
-	Algorithm        string               `json:"algorithm,omitempty"`
-	TDConfig         *training.TDConfig   `json:"td_config,omitempty"`
-	TDHistory        []training.TDMetric  `json:"td_history,omitempty"`
-	NeuralCandidate  *NeuralCandidate     `json:"neural_candidate,omitempty"`
-	Generation       int                  `json:"generation"`
-	GenerationGames  int                  `json:"generation_games"`
-	GenerationBudget int                  `json:"generation_budget"`
-	Counters         training.Counters    `json:"counters"`
-	History          []training.Metric    `json:"history"`
-	Candidates       []training.Candidate `json:"candidates"`
-	Saved            []Publication        `json:"saved"`
-	WallSeconds      float64              `json:"wall_seconds"`
-	Evaluation       *EvaluationSummary   `json:"evaluation"`
-	WatchedGame      *GameNotice          `json:"watched_game,omitempty"`
+	Execution          *ExecutionInfo          `json:"execution,omitempty"`
+	HybridConfig       *training.HybridConfig  `json:"hybrid_config,omitempty"`
+	PopulationProgress *PopulationProgress     `json:"population_progress,omitempty"`
+	NeuralCandidates   []training.NeuroSummary `json:"neural_candidates,omitempty"`
+	Replacements       []training.Replacement  `json:"replacements,omitempty"`
+	ID                 string                  `json:"id"`
+	Kind               string                  `json:"kind"`
+	Name               string                  `json:"name"`
+	Version            uint64                  `json:"version"`
+	Revision           uint64                  `json:"revision"`
+	State              string                  `json:"state"`
+	CreatedAt          string                  `json:"created_at"`
+	UpdatedAt          string                  `json:"updated_at"`
+	Error              string                  `json:"error"`
+	CanResume          bool                    `json:"can_resume"`
+	Config             *training.Config        `json:"config"`
+	Algorithm          string                  `json:"algorithm,omitempty"`
+	TDConfig           *training.TDConfig      `json:"td_config,omitempty"`
+	TDHistory          []training.TDMetric     `json:"td_history,omitempty"`
+	NeuralCandidate    *NeuralCandidate        `json:"neural_candidate,omitempty"`
+	Generation         int                     `json:"generation"`
+	GenerationGames    int                     `json:"generation_games"`
+	GenerationBudget   int                     `json:"generation_budget"`
+	Counters           training.Counters       `json:"counters"`
+	History            []training.Metric       `json:"history"`
+	Candidates         []training.Candidate    `json:"candidates"`
+	Saved              []Publication           `json:"saved"`
+	WallSeconds        float64                 `json:"wall_seconds"`
+	Evaluation         *EvaluationSummary      `json:"evaluation"`
+	WatchedGame        *GameNotice             `json:"watched_game,omitempty"`
 }
 type receipt struct {
 	Hash    string `json:"hash"`
@@ -136,6 +142,7 @@ type evaluationState struct {
 	Results         []training.Score `json:"results"`
 }
 type record struct {
+	NeuroTraining *training.NeuroState `json:"neuro_training,omitempty"`
 	Snapshot
 	FormatVersion    int                  `json:"format_version"`
 	CreationHash     string               `json:"creation_hash"`
@@ -238,6 +245,9 @@ func generationPath(id string, g int) string {
 func syncSnapshot(r *record) {
 	r.WatchedGame = gameNotice(r.WatchReplay)
 	r.CanResume = r.State == Stopped || r.State == Interrupted
+	if r.NeuroTraining != nil {
+		syncNeuroSnapshot(r)
+	}
 	if r.TDTraining != nil {
 		syncTDSnapshot(r)
 	}
@@ -339,6 +349,8 @@ func (m *Manager) List(kind string) ([]Snapshot, error) {
 			r.Candidates = []training.Candidate{}
 			r.History = []training.Metric{}
 			r.TDHistory = nil
+			r.NeuralCandidates = nil
+			r.Replacements = nil
 			r.Saved = []Publication{}
 			if r.Evaluation != nil {
 				e := *r.Evaluation
@@ -381,7 +393,23 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (Snapshot, error)
 		return Snapshot{}, fmt.Errorf("%w: invalid run name, command, or capacity", ErrInvalid)
 	}
 	r := initial(req.CommandID, Training, strings.TrimSpace(req.Name), fp)
-	if req.TDConfig != nil {
+	if req.HybridConfig != nil || req.Algorithm == training.GAMLPAlgorithm {
+		if req.TDConfig != nil || (req.HybridConfig != nil && (req.Config != (training.Config{}) || req.Algorithm != training.HybridAlgorithm)) {
+			return Snapshot{}, fmt.Errorf("%w: incompatible population configuration", ErrInvalid)
+		}
+		var st training.NeuroState
+		var err error
+		if req.HybridConfig != nil {
+			st, err = training.NewHybrid(*req.HybridConfig)
+		} else {
+			st, err = training.NewGAMLP(req.Config)
+		}
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		r.NeuroTraining = &st
+		r.Execution = neuroExecution(st)
+	} else if req.TDConfig != nil {
 		if req.Config != (training.Config{}) || req.TDConfig.Games > maxTDJobGames || (req.Algorithm != "" && req.Algorithm != req.TDConfig.Algorithm()) {
 			return Snapshot{}, fmt.Errorf("%w: incompatible neural configuration or game budget", ErrInvalid)
 		}
@@ -533,6 +561,9 @@ func (m *Manager) Save(ctx context.Context, id string, req SaveRequest) (library
 		detail, err := m.bots.Get(r.Commands[req.CommandID].BotID)
 		return detail.Card, err
 	}
+	if r.NeuroTraining != nil {
+		return m.saveNeuro(ctx, r, next, req)
+	}
 	if r.TDTraining != nil {
 		return m.saveTD(ctx, r, next, req)
 	}
@@ -596,6 +627,9 @@ func (m *Manager) Generation(id string, n int) (training.Generation, error) {
 	}
 	if n < 1 || n > len(r.GenerationHashes) {
 		return training.Generation{}, ErrNotFound
+	}
+	if r.NeuroTraining != nil {
+		return m.neuroGenerationView(r, n)
 	}
 	if r.TDTraining != nil {
 		return training.Generation{}, fmt.Errorf("%w: neural runs archive game checkpoints, not evaluated generations", ErrInvalid)
@@ -684,7 +718,12 @@ func (m *Manager) storageFailure(id string, err error) {
 func (m *Manager) run(id string) {
 	m.mu.Lock()
 	isTD := m.records[id].TDTraining != nil
+	isNeuro := m.records[id].NeuroTraining != nil
 	m.mu.Unlock()
+	if isNeuro {
+		m.runNeuro(id)
+		return
+	}
 	if isTD {
 		m.runTD(id)
 		return
@@ -839,6 +878,9 @@ func validate(r record) error {
 		return fmt.Errorf("invalid job state")
 	}
 	if r.Kind == Training {
+		if r.NeuroTraining != nil {
+			return validateNeuroRecord(r)
+		}
 		if r.TDTraining != nil {
 			return validateTDRecord(r)
 		}
@@ -859,7 +901,7 @@ func validate(r record) error {
 			return fmt.Errorf("training replay in evaluation checkpoint")
 		}
 		e := r.FrozenEvaluation
-		if e == nil || r.Training != nil || r.TDTraining != nil || e.Algorithm != "paired-evaluation-v1" || e.Ruleset != game.Ruleset || e.FeaturesVersion != features.Version {
+		if e == nil || r.NeuroTraining != nil || r.Training != nil || r.TDTraining != nil || e.Algorithm != "paired-evaluation-v1" || e.Ruleset != game.Ruleset || e.FeaturesVersion != features.Version {
 			return fmt.Errorf("incompatible evaluation checkpoint")
 		}
 		if err := e.Config.Validate(); err != nil {

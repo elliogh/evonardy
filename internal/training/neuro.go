@@ -228,6 +228,46 @@ func ValidateNeuro(s NeuroState) error {
 	if s.Version != 1 || (s.Algorithm != GAMLPAlgorithm && s.Algorithm != HybridAlgorithm) || s.RandomContract != NeuroRandomContract || s.Ruleset != game.Ruleset || s.EncoderVersion != encoder.Version || s.NetworkVersion != neural.Version {
 		return fmt.Errorf("incompatible neural population")
 	}
+
+	expectedDevelopment := [2]agent.Policy{{ID: "builtin/heuristic-v1", Kind: "linear", Weights: features.DefaultWeights}, {ID: "builtin/random-v1", Kind: "random"}}
+	if s.Development != expectedDevelopment {
+		return fmt.Errorf("changed frozen development policies")
+	}
+	populationGeneration := s.Generation
+	if s.Generation == s.Config.Generations {
+		populationGeneration--
+	}
+	ids := map[string]bool{}
+	parents := map[string]bool{}
+	for i := 0; i < s.Config.Population; i++ {
+		ids[neuroID(populationGeneration, i)] = true
+		if populationGeneration > 0 {
+			parents[neuroID(populationGeneration-1, i)] = true
+		}
+	}
+	for _, p := range s.Population {
+		if !ids[p.ID] {
+			return fmt.Errorf("invalid neural lineage identity")
+		}
+		if populationGeneration == 0 {
+			if len(p.Parents) != 0 || p.Reason != "initialization" {
+				return fmt.Errorf("invalid initial neural lineage")
+			}
+		} else if len(p.Parents) != 1 || !parents[p.Parents[0]] {
+			return fmt.Errorf("invalid neural parent identity")
+		}
+		if s.Algorithm == GAMLPAlgorithm {
+			if p.Hyperparameters != (TDHyperparameters{}) {
+				return fmt.Errorf("GA-MLP has learning settings")
+			}
+			if populationGeneration > 0 && p.Reason != "elite" && p.Reason != "mutation" {
+				return fmt.Errorf("invalid GA-MLP variation reason")
+			}
+		}
+		if s.Algorithm == HybridAlgorithm && populationGeneration > 0 && p.Reason != "survivor" && p.Reason != "bottom-quarter fitness replacement" {
+			return fmt.Errorf("invalid Hybrid replacement reason")
+		}
+	}
 	proxy := s.schedule()
 	proxy.Version = 1
 	proxy.Algorithm = Algorithm
@@ -270,4 +310,25 @@ func ValidateNeuro(s NeuroState) error {
 		return fmt.Errorf("invalid neural mutation count")
 	}
 	return Validate(proxy)
+}
+
+// NeuroSummary excludes the private 1,857-parameter learner vector.
+type NeuroSummary struct {
+	ID              string            `json:"id"`
+	Parents         []string          `json:"parents"`
+	Reason          string            `json:"reason"`
+	Stats           *Stats            `json:"stats"`
+	Hyperparameters TDHyperparameters `json:"hyperparameters,omitzero"`
+}
+
+func NeuroSummaries(population []NeuroCandidate) []NeuroSummary {
+	out := make([]NeuroSummary, len(population))
+	for i, p := range population {
+		out[i] = NeuroSummary{ID: p.ID, Parents: slices.Clone(p.Parents), Reason: p.Reason, Hyperparameters: p.Hyperparameters}
+		if p.Stats != nil {
+			stats := *p.Stats
+			out[i].Stats = &stats
+		}
+	}
+	return out
 }

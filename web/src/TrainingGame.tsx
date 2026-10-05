@@ -139,7 +139,7 @@ export function TrainingGame({ job }: { job: Job }) {
       {!job.watched_game ? (
         <p className="empty-state">
           {active(job)
-            ? `The first ${job.td_config ? "saved game" : "completed batch"} will appear here.`
+            ? `The first ${job.td_config || job.hybrid_config ? "saved game" : "completed batch"} will appear here.`
             : "No game was recorded for this run."}
         </p>
       ) : !view || !position ? (
@@ -153,7 +153,9 @@ export function TrainingGame({ job }: { job: Job }) {
           <div className="watch-heading">
             <div>
               <strong>
-                {job.td_config ? (
+                {job.td_config ||
+                (job.hybrid_config &&
+                  view.game.candidate_id === view.game.opponent_id) ? (
                   `${algorithmName(job)} self-play`
                 ) : (
                   <>
@@ -163,8 +165,14 @@ export function TrainingGame({ job }: { job: Job }) {
                 )}
               </strong>
               <small>
-                {job.td_config ? (
-                  `Game ${view.game.generation} · The current learner plays both colors`
+                {job.td_config ||
+                (job.hybrid_config &&
+                  view.game.candidate_id === view.game.opponent_id) ? (
+                  job.hybrid_config ? (
+                    `Round ${view.game.generation} · Training game ${view.game.index + 1} · The current learner plays both colors`
+                  ) : (
+                    `Game ${view.game.generation} · The current learner plays both colors`
+                  )
                 ) : (
                   <>
                     Generation {view.game.generation} · Game{" "}

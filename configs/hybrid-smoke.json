@@ -1,0 +1,14 @@
+{
+  "seed": 42,
+  "rounds": 2,
+  "games_per_round": 1,
+  "pairs_per_opponent": 1,
+  "workers": 2,
+  "max_turns": 1200,
+  "alpha": 0.001,
+  "epsilon": 0.05,
+  "lambda": 0.7,
+  "alpha_bounds": { "min": 0.00001, "max": 0.1 },
+  "epsilon_bounds": { "min": 0, "max": 0.3 },
+  "lambda_bounds": { "min": 0, "max": 0.95 }
+}

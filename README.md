@@ -3,9 +3,9 @@
 [![CI](https://github.com/elliogh/evonardy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/elliogh/evonardy/actions/workflows/ci.yml)
 
 A local open-source **long nardy (long backgammon)** project with a Go backend
-and a React/TypeScript UI. M0–M4 implements the game engine, Random/Heuristic
+and a React/TypeScript UI. M0–M5 implements the game engine, Random/Heuristic
 agents, verifiable replays, browser play, a persistent bot library, and real
-GA-linear and neural TD(0)/TD(lambda) training with checkpoint/resume and independent evaluation.
+GA-linear, GA-MLP, neural TD(0)/TD(lambda), and synchronous Hybrid training with checkpoint/resume and independent evaluation.
 
 The UI and all repository content are maintained in English.
 
@@ -52,10 +52,10 @@ bin/evonardy bots save --source builtin/heuristic-v1 --name "My baseline" --data
 bin/evonardy bots list --data-dir ./data
 ```
 
-Open **Training** and select GA-linear, TD(0), or TD(lambda). Use the smoke preset
-for a short run, then save a GA candidate or a neural game checkpoint to My bots.
+Open **Training** and select GA-linear, GA-MLP, TD(0), TD(lambda), or Hybrid. Use the smoke preset
+for a short run, then save an evaluated population candidate or a neural TD game checkpoint to My bots.
 Neural runs expose learning/exploration settings, actual TD updates, and measured
-TD error; these are diagnostics, not claims of playing strength.
+TD error; Hybrid separates training from selection and shows participant lineage. These are diagnostics, not claims of playing strength.
 The **Training games** board automatically plays sampled actual matches from the
 run. Pause, step through turns, change playback speed, or follow newer games.
 Training continues at full speed while you watch. The latest sample survives
@@ -70,11 +70,13 @@ The shared offline lifecycle is also available (stop the server first):
 bin/evonardy train --config configs/ga-linear-smoke.json --data-dir ./data --save-name "My GA bot"
 bin/evonardy train --algorithm td0 --config configs/td-zero-smoke.json --data-dir ./data --save-name "My TD bot"
 bin/evonardy train --algorithm td-lambda --config configs/td-lambda-smoke.json --data-dir ./data --save-name "My trace bot"
+bin/evonardy train --algorithm ga-mlp --config configs/ga-mlp-smoke.json --data-dir ./data --save-name "My neural GA bot"
+bin/evonardy train --algorithm hybrid --config configs/hybrid-smoke.json --data-dir ./data --save-name "My Hybrid bot"
 bin/evonardy resume --run <run-id> --data-dir ./data
 bin/evonardy evaluate --bot <saved-bot-id> --config configs/evaluation-smoke.json --data-dir ./data
 ```
 
-SIGINT/SIGTERM checkpoints an active job after its current bounded batch (one game for TD). See
+SIGINT/SIGTERM checkpoints an active job after its current bounded batch (one learner game for TD/Hybrid). See
 [docs/TRAINING.md](docs/TRAINING.md) for fitness, counters, limits, and reproducibility.
 
 Run bounded baseline simulations independently:
@@ -161,7 +163,10 @@ frozen bot while another run trains.
 M4 adds real TD(0) and TD(lambda) browser flows through train, frozen save, server
 restart, reload, independent evaluation, sampled self-play, stop/resume, and a
 complete game against the saved neural model. Watching or playing leaves learner
-streams and published weights unchanged.
+streams and published weights unchanged. M5 adds two population scenarios: archived
+GA-MLP/Hybrid candidate saves, lineage and replacement inspection, restart, independent
+evaluation, stopped/resumed learning, and immutable neural play. The suite contains
+eight real browser scenarios.
 
 Tasks and current status: [GitHub Issues](https://github.com/elliogh/evonardy/issues)
 and the [EvoNardy roadmap](https://github.com/users/elliogh/projects/1).

@@ -95,6 +95,13 @@ func cloneHybrid(s NeuroState) NeuroState {
 	h.History = slices.Clone(h.History)
 	s.Hybrid = &h
 	s.Population = slices.Clone(s.Population)
+	for i := range s.Population {
+		s.Population[i].Parents = slices.Clone(s.Population[i].Parents)
+		if s.Population[i].Stats != nil {
+			stats := *s.Population[i].Stats
+			s.Population[i].Stats = &stats
+		}
+	}
 	return s
 }
 func HybridTrainingReady(s NeuroState) bool {
@@ -232,7 +239,14 @@ func validateHybrid(s NeuroState) error {
 		return fmt.Errorf("invalid Hybrid dimensions")
 	}
 	var games int
+	prefixEnded := false
 	for _, n := range h.TrainingDone {
+		if prefixEnded && n != 0 {
+			return fmt.Errorf("invalid Hybrid participant prefix")
+		}
+		if n < c.GamesPerRound {
+			prefixEnded = true
+		}
 		if n < 0 || n > c.GamesPerRound {
 			return fmt.Errorf("invalid participant progress")
 		}
@@ -263,6 +277,9 @@ func validateHybrid(s NeuroState) error {
 
 // StepNeuro performs one safe boundary: a learner game or a selection wave.
 func StepNeuro(ctx context.Context, s NeuroState) (NeuroState, *NeuroGeneration, *PlayedGame, error) {
+	if err := ValidateNeuro(s); err != nil {
+		return s, nil, nil, err
+	}
 	if s.Hybrid != nil && !HybridTrainingReady(s) {
 		next, played, err := TrainHybridGame(ctx, s)
 		if err != nil {
@@ -273,6 +290,9 @@ func StepNeuro(ctx context.Context, s NeuroState) (NeuroState, *NeuroGeneration,
 	wave, err := PlayNeuroWave(ctx, s)
 	if err != nil {
 		return s, nil, nil, err
+	}
+	if s.Hybrid != nil && wave.Sample != nil {
+		wave.Sample.Index += HybridParticipants * s.Hybrid.Config.GamesPerRound
 	}
 	next, err := AddNeuro(s, wave.Scores)
 	if err != nil {

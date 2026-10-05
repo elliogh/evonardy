@@ -338,3 +338,17 @@ i5-1038NG7 machine with 200ms samples; measurements, not promises:
 | LegalTurns, midgame fixture, 3–3 | 237218 | 272303 | 467 |
 | HeuristicScore, opening position | 215.4 | 0 | 0 |
 | Simulation, seed 42, 1 Heuristic–Random game | 14649727 | 14370574 | 31411 |
+
+## M5 verification
+
+Task tracking remains in [M5 #14](https://github.com/elliogh/evonardy/issues/14)
+and its implementation issues #36–#38. This note records actual bounded checks:
+`make test`, `make smoke`, `make build`, and `make bench` passed on Go 1.25.5
+macOS/amd64. Existing six Chromium scenarios passed; the two new GA-MLP/Hybrid
+scenarios passed on a rebuilt server after correcting a test matcher. Population
+resume, archive-ahead crash repair, changed-archive rejection and race checks passed.
+GA-MLP smoke completed 32 selection games, 5571 parameter mutations and zero updates;
+Hybrid completed 16 training plus 64 selection games and 1469 TD updates. Both
+published immutable neural models and completed separate eight-game evaluations.
+Desktop/390px screenshots were inspected without horizontal overflow. Smoke proves
+execution and persistence, not playing strength; systematic comparisons remain M6.

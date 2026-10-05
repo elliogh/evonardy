@@ -1,7 +1,7 @@
 # Architecture
 
-M0–M4 provides the runnable application, shared position encoder, neural network,
-frozen neural inference, and sequential TD(0)/TD(lambda) self-play. Durable neural
+M0–M5 provides the runnable application, shared position encoder, neural network,
+frozen neural inference, sequential TD(0)/TD(lambda) self-play, mutation-only GA-MLP and synchronous Hybrid. Durable neural
 jobs and browser controls use the existing queue/library/evaluation lifecycle. Later modules are added
 with behavior rather than empty scaffolds.
 Go 1.25 with the standard library;
@@ -40,7 +40,11 @@ go.sum file is not needed yet. All repository content and UI copy use English.
 - `training`: pure GA-linear generation state, paired schedules, full-generation
   fitness, elitism/tournament selection, crossover, mutation, and measured work.
   Sequential TD(0)/TD(lambda) uses the shared neural network and fixed White-reward targets,
-  with independent game-boundary state and real self-play. See [TD.md](TD.md).
+  with independent game-boundary state and real self-play. GA-MLP reuses paired
+  selection with owned neural genomes; Hybrid trains eight TD participants, freezes
+  selection and copies trained leaders into the bottom quarter between rounds.
+  All methods account for actual work; archives retain lineage and replacement reasons.
+  See [TD.md](TD.md) and [TRAINING.md](TRAINING.md).
 - `jobs`: bounded durable queue, atomic checkpoints, immutable generation archives,
   interruption recovery, versioned controls, frozen publication, and evaluation.
 - `cmd/evonardy`: serve, train, resume, evaluate, bots list/save, simulate, and replay.
@@ -66,6 +70,5 @@ replays are immutable.
 
 ## Later milestones
 
-GA-MLP and Hybrid follow in M5;
-comparisons and release work remain M6–M7. The completed GA-linear lifecycle and random
+Research comparisons and release work remain M6–M7. The completed GA-linear lifecycle and random
 contracts are documented in [TRAINING.md](TRAINING.md).
