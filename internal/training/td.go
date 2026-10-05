@@ -10,12 +10,15 @@ import (
 )
 
 const TDAlgorithm = "td-zero-v1"
+const TDLambdaAlgorithm = "td-lambda-v1"
 const TDRandomContract = "keyed-pcg-td-v1"
 
 // TDLearner owns one sequential learner. Inference snapshots own separate copies.
 type TDLearner struct {
 	network neural.Network
 	alpha   float64
+	lambda  float64
+	traces  neural.Gradient
 }
 
 type TDUpdate struct {
@@ -27,8 +30,16 @@ type TDUpdate struct {
 }
 
 func NewTDLearner(parameters []float64, alpha float64) (*TDLearner, error) {
+	return NewTDLambda(parameters, alpha, 0)
+}
+
+// NewTDLambda starts with empty accumulating traces, including replacement models.
+func NewTDLambda(parameters []float64, alpha, lambda float64) (*TDLearner, error) {
 	if !finiteTD(alpha) || alpha <= 0 || alpha > 1 {
 		return nil, fmt.Errorf("alpha must be finite in (0,1]")
+	}
+	if !finiteTD(lambda) || lambda < 0 || lambda > 1 {
+		return nil, fmt.Errorf("lambda must be finite in [0,1]")
 	}
 	n, err := neural.New(parameters)
 	if err != nil {
@@ -39,10 +50,13 @@ func NewTDLearner(parameters []float64, alpha float64) (*TDLearner, error) {
 			return nil, fmt.Errorf("TD parameters exceed inference bounds")
 		}
 	}
-	return &TDLearner{network: n, alpha: alpha}, nil
+	return &TDLearner{network: n, alpha: alpha, lambda: lambda}, nil
 }
 
 func (l *TDLearner) Parameters() []float64 { return l.network.Parameters() }
+
+func (l *TDLearner) Traces() neural.Gradient { return l.traces }
+func (l *TDLearner) ResetTraces()            { l.traces = neural.Gradient{} }
 
 // Update treats the bootstrap target as constant and never flips the White value
 // perspective. The caller supplies completed Go transitions, not draft previews.
@@ -82,8 +96,13 @@ func (l *TDLearner) Update(current, next game.Position) (TDUpdate, error) {
 	}
 	report.Delta = report.Target - value
 	parameters := l.network.Parameters()
+	var traces neural.Gradient
 	for i, derivative := range gradient {
-		parameters[i] += l.alpha * report.Delta * derivative
+		traces[i] = l.lambda*l.traces[i] + derivative
+		if !finiteTD(traces[i]) {
+			return TDUpdate{}, fmt.Errorf("nonfinite TD trace %d", i)
+		}
+		parameters[i] += l.alpha * report.Delta * traces[i]
 		if !finiteTD(parameters[i]) || math.Abs(parameters[i]) > 1e6 {
 			return TDUpdate{}, fmt.Errorf("TD update produced invalid parameter %d", i)
 		}
@@ -93,6 +112,10 @@ func (l *TDLearner) Update(current, next game.Position) (TDUpdate, error) {
 		return TDUpdate{}, err
 	}
 	l.network = updated
+	l.traces = traces
+	if report.Terminal {
+		l.ResetTraces()
+	}
 	return report, nil
 }
 

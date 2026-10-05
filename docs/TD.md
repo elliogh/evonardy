@@ -1,7 +1,7 @@
 # Neural temporal-difference learning
 
-Algorithm: `td-zero-v1`; random contract: `keyed-pcg-td-v1`. The numerical
-network/encoder contracts are in [NEURAL.md](NEURAL.md) and [ENCODER.md](ENCODER.md).
+Algorithms: `td-zero-v1` and `td-lambda-v1`; random contract: `keyed-pcg-td-v1`.
+The numerical network/encoder contracts are in [NEURAL.md](NEURAL.md) and [ENCODER.md](ENCODER.md).
 `training.NewTDLearner` owns one sequential float64 learner;
 `Update(current, next)` consumes authoritative full-turn positions. It validates
 positions but does not generate or certify a move; the real self-play runner
@@ -67,5 +67,33 @@ Tests check all parameter updates on artificial White/Black/nonterminal transiti
 against independent closed-form calculations, verify stop-gradient targets, and
 exercise bounded real completed/truncated games. Actual replay reconstruction
 checks legality and terminal behavior. Exploration changes cannot change dice;
-forward/update counts are checked against observed actions. TD(lambda), durable
-CLI/API jobs, and the neural training UI remain subsequent M4 tasks.
+forward/update counts are checked against observed actions. Durable
+CLI/API jobs and the neural training UI remain subsequent M4 tasks.
+
+## Accumulating TD(lambda) traces
+
+`NewTDLambda(parameters, alpha, lambda)` extends the same learner with accumulating
+eligibility traces. Gamma remains 1 and the target contract is unchanged:
+
+```text
+e = lambda * e + gradient
+theta += alpha * delta * e
+```
+
+Lambda must be finite in `[0,1]`. `lambda=0` agrees exactly with TD(0);
+`DefaultTDLambdaConfig()` selects a separate lambda=0.7 experiment. A positive
+lambda selects `td-lambda-v1`, while omitted/zero lambda preserves `td-zero-v1`
+and its original JSON/configuration behavior.
+
+New learners and replacement networks start with zero traces. `ResetTraces`
+clears traces without changing weights; `Traces()` returns a value copy.
+Successful terminal updates apply the final trace, then clear it. Weight/trace
+updates commit together; invalid input, overflow, or parameter-bound failures
+change neither. Traces belong to one sequential learner and are never inference
+or published-model parameters.
+
+The self-play runner constructs a fresh learner at every game boundary, including
+after truncation and restore. Boundary states therefore need no pending traces;
+no unfinished game is checkpointed. Independent one-neuron trajectory calculations
+verify every trace and parameter, lambda=0 behavior, terminal/manual/replacement
+reset, atomic failure, and identical next games after boundary JSON restoration.
