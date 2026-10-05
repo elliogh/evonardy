@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"evonardy/internal/features"
 	"evonardy/internal/jobs"
 	"evonardy/internal/library"
 	"evonardy/internal/neural"
+	"evonardy/internal/storage"
 	"evonardy/internal/training"
 )
 
@@ -87,5 +89,41 @@ func TestCLINeuralTrainSaveReloadAndEvaluate(t *testing.T) {
 				t.Fatal(output.String())
 			}
 		})
+	}
+}
+
+func TestCLITrainFromSavedLinearModel(t *testing.T) {
+	dir := t.TempDir()
+	store, err := storage.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weights := features.DefaultWeights
+	weights[7] = .95
+	source, err := library.New(store).SaveLinear("CLI source", weights[:], "fixture", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	var output bytes.Buffer
+	args := []string{"train", "--config", filepath.Join("..", "..", "configs", "ga-linear-smoke.json"), "--data-dir", dir, "--source-bot", source.ID, "--save-name", "CLI descendant"}
+	if err = run(context.Background(), args, &output); err != nil {
+		t.Fatal(err)
+	}
+	var x jobs.Snapshot
+	if err = json.Unmarshal(output.Bytes(), &x); err != nil {
+		t.Fatal(err)
+	}
+	if x.State != jobs.Completed || x.SourceBotID != source.ID || x.Counters.Games != 48 || x.Algorithm != training.FromModelAlgorithm {
+		t.Fatal("CLI lost source or budget", output.String())
+	}
+	store, err = storage.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	frozen, err := library.New(store).Freeze(source.ID)
+	if err != nil || frozen.Weights != weights {
+		t.Fatal("CLI changed source", err)
 	}
 }

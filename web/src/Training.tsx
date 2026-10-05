@@ -150,6 +150,8 @@ export function Jobs({
   );
 }
 function TrainingForm() {
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [sourceBotID, setSourceBotID] = useState("");
   const [cfg, setConfig] = useState<TrainingConfig>({ ...defaults });
   const [method, setMethod] = useState("ga-linear");
   const [td, setTD] = useState<Required<TDConfig>>({ ...tdDefaults });
@@ -157,6 +159,12 @@ function TrainingForm() {
   const [name, setName] = useState("My first bot");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    api<Bot[]>("/bots")
+      .then(setBots)
+      .catch((e) => setError(failure(e)));
+  }, []);
+  const fromSaved = method === "ga-linear" && sourceBotID !== "";
   const field = (
     key: keyof TrainingConfig,
     label: string,
@@ -256,6 +264,7 @@ function TrainingForm() {
                   }
                 : {
                     config: cfg,
+                    ...(fromSaved ? { source_bot_id: sourceBotID } : {}),
                     ...(method === "ga-mlp" ? { algorithm: "ga-mlp-v1" } : {}),
                   }),
           });
@@ -282,6 +291,9 @@ function TrainingForm() {
                 ? setTD({ ...tdDefaults, games: 4 })
                 : setConfig({
                     ...(method === "ga-mlp" ? gaMLPDefaults : defaults),
+                    ...(fromSaved
+                      ? { initial_sigma: 0.1, mutation_sigma: 0.05 }
+                      : {}),
                     population: 4,
                     generations: 2,
                     pairs_per_opponent: 1,
@@ -299,7 +311,13 @@ function TrainingForm() {
             onChange={(e) => {
               setMethod(e.target.value);
               if (e.target.value === "ga-mlp") setConfig({ ...gaMLPDefaults });
-              if (e.target.value === "ga-linear") setConfig({ ...defaults });
+              if (e.target.value === "ga-linear")
+                setConfig({
+                  ...defaults,
+                  ...(sourceBotID
+                    ? { initial_sigma: 0.1, mutation_sigma: 0.05 }
+                    : {}),
+                });
             }}
           >
             <option value="ga-linear">GA-linear</option>
@@ -309,6 +327,33 @@ function TrainingForm() {
             <option value="td-lambda">TD(lambda)</option>
           </select>
         </label>
+        {method === "ga-linear" && (
+          <label className="wide">
+            Start from saved bot
+            <select
+              value={sourceBotID}
+              onChange={(e) => {
+                setSourceBotID(e.target.value);
+                if (e.target.value && !sourceBotID) {
+                  setConfig((c) => ({
+                    ...c,
+                    initial_sigma: 0.1,
+                    mutation_sigma: 0.05,
+                  }));
+                }
+              }}
+            >
+              <option value="">Heuristic baseline (new population)</option>
+              {bots
+                .filter((b) => b.available && !b.builtin && b.kind === "linear")
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} · {b.id.slice(0, 8)}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <label className="wide">
           Run name
           <input
@@ -422,10 +467,16 @@ function TrainingForm() {
               cfg.population *
               cfg.generations *
               cfg.pairs_per_opponent *
-              4
+              (fromSaved ? 6 : 4)
             ).toLocaleString("en")}{" "}
-            games planned against Heuristic and Random, balanced across both
-            colors. A truncated game fails the run.
+            games planned against{" "}
+            {fromSaved
+              ? "Heuristic, Random and the frozen source bot"
+              : "Heuristic and Random"}
+            , balanced across both colors.{" "}
+            {fromSaved &&
+              "One initial candidate exactly copies the source. Other candidates vary its weights. Each generation receives new paired dice. Selecting a source sets initial spread to 0.1 and mutation scale to 0.05; adjust these in Advanced settings. The source remains unchanged. "}
+            A truncated game fails the run.
           </>
         )}
       </p>
@@ -683,6 +734,13 @@ function JobDetail({
                   : "INDEPENDENT PAIRED MATCHES"}
               </p>
               <h1>{x.name}</h1>
+              {x.source_bot_id && (
+                <p className="muted">
+                  Started from <a href="#">{x.source_bot_id.slice(0, 12)}</a>.
+                  The source stays frozen; saved descendants require independent
+                  evaluation.
+                </p>
+              )}
             </div>
             <span
               className="tag job-state"

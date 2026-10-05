@@ -1,0 +1,12 @@
+{
+  "seed": 1001,
+  "population": 64,
+  "generations": 20,
+  "pairs_per_opponent": 4,
+  "workers": 2,
+  "max_turns": 1200,
+  "elite_fraction": 0.1,
+  "tournament_size": 3,
+  "initial_sigma": 0.1,
+  "mutation_sigma": 0.05
+}

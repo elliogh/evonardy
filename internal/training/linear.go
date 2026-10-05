@@ -103,6 +103,7 @@ type Metric struct {
 	ForwardEvaluations uint64  `json:"forward_evaluations"`
 }
 type Generation struct {
+	SourceBotID      string         `json:"source_bot_id,omitempty"`
 	NeuralRanked     []NeuroSummary `json:"neural_ranked,omitempty"`
 	Replacements     []Replacement  `json:"replacements,omitempty"`
 	TrainingCounters Counters       `json:"training_counters,omitzero"`
@@ -115,6 +116,7 @@ type Generation struct {
 	Metric           Metric         `json:"metric"`
 }
 type State struct {
+	Source          *LinearSource   `json:"source,omitempty"`
 	Version         int             `json:"version"`
 	Algorithm       string          `json:"algorithm"`
 	RandomContract  string          `json:"random_contract"`
@@ -130,12 +132,27 @@ type State struct {
 }
 
 func New(c Config) (State, error) {
+	return newLinear(c, nil)
+}
+
+func newLinear(c Config, source *LinearSource) (State, error) {
 	if err := c.Validate(); err != nil {
 		return State{}, err
 	}
 	s := State{Version: 1, Algorithm: Algorithm, RandomContract: RandomContract, Ruleset: game.Ruleset, FeaturesVersion: features.Version, Config: c, Development: [2]agent.Policy{{ID: "builtin/heuristic-v1", Kind: "linear", Weights: features.DefaultWeights}, {ID: "builtin/random-v1", Kind: "random"}}, Population: []Candidate{}, Results: []Score{}, History: []Metric{}}
+	if source != nil {
+		copy := *source
+		s.Source = &copy
+		s.Algorithm, s.RandomContract = FromModelAlgorithm, FromModelRandomContract
+		if err := validateSource(s); err != nil {
+			return State{}, err
+		}
+	}
 	for i := 0; i < c.Population; i++ {
 		weights := features.DefaultWeights
+		if s.Source != nil {
+			weights = s.Source.Policy.Weights
+		}
 		if i > 0 {
 			r := random.New(c.Seed, "ga/initialization", uint64(i))
 			for j := range weights {
@@ -156,17 +173,17 @@ type Task struct {
 }
 
 func task(s State, index int) Task {
-	perCandidate := s.Config.PairsPerOpponent * 4
+	perCandidate := GamesPerCandidate(s)
 	candidate := index / perCandidate
 	within := index % perCandidate
 	opponent := within / (s.Config.PairsPerOpponent * 2)
 	pair := (within / 2) % s.Config.PairsPerOpponent
-	return Task{Index: index, Candidate: candidate, Opponent: opponent, Pair: pair, Side: game.Player(index % 2), Seed: PairSeed(s.Config.Seed, "ga/development", opponent, pair)}
+	return Task{Index: index, Candidate: candidate, Opponent: opponent, Pair: pair, Side: game.Player(index % 2), Seed: SelectionPairSeed(s, s.Generation, opponent, pair)}
 }
 func PairSeed(seed uint64, domain string, opponent, pair int) uint64 {
 	return random.New(seed, domain+fmt.Sprintf("/opponent/%d", opponent), uint64(pair)).Uint64()
 }
-func Slots(s State) int { return s.Config.Population * s.Config.PairsPerOpponent * 4 }
+func Slots(s State) int { return s.Config.Population * GamesPerCandidate(s) }
 func NextTasks(s State) []Task {
 	if s.Generation >= s.Config.Generations {
 		return nil
@@ -220,7 +237,7 @@ func PlayWave(ctx context.Context, s State, tasks []Task) (Wave, error) {
 		go func() {
 			defer wg.Done()
 			candidate := agent.Policy{ID: s.Population[t.Candidate].ID, Kind: "linear", Weights: s.Population[t.Candidate].Weights}
-			opponent := s.Development[t.Opponent]
+			opponent := SelectionOpponent(s, t.Opponent)
 			factories := [2]arena.Factory{}
 			factories[t.Side] = arena.Factory{ID: candidate.ID, New: candidate.New}
 			factories[t.Side.Other()] = arena.Factory{ID: opponent.ID, New: opponent.New}
@@ -271,7 +288,7 @@ func Add(s State, scores []Score) (State, error) {
 	truncated := false
 	for _, score := range scores {
 		t := task(s, len(s.Results))
-		if score.Index != t.Index || score.Seed != t.Seed || score.Side != t.Side || score.OpponentID != s.Development[t.Opponent].ID || score.Index >= Slots(s) {
+		if score.Index != t.Index || score.Seed != t.Seed || score.Side != t.Side || score.OpponentID != SelectionOpponent(s, t.Opponent).ID || score.Index >= Slots(s) {
 			return s, fmt.Errorf("result schedule mismatch")
 		}
 		if err := ValidScore(score, s.Config.MaxTurns); err != nil {
@@ -341,7 +358,7 @@ func Advance(s State) (State, Generation, error) {
 	ranked := append([]Candidate{}, s.Population...)
 	metric := Metric{Generation: s.Generation + 1, Games: len(s.Results)}
 	for i := range ranked {
-		n := s.Config.PairsPerOpponent * 4
+		n := GamesPerCandidate(s)
 		stats, err := Summarize(s.Results[i*n : (i+1)*n])
 		if err != nil {
 			return s, Generation{}, err
@@ -364,7 +381,10 @@ func Advance(s State) (State, Generation, error) {
 	})
 	metric.BestFitness = ranked[0].Stats.Fitness
 	metric.BestCandidateID = ranked[0].ID
-	gen := Generation{Algorithm: Algorithm, Ruleset: game.Ruleset, FeaturesVersion: features.Version, Number: s.Generation + 1, Ranked: ranked, Scores: append([]Score{}, s.Results...), Metric: metric}
+	gen := Generation{Algorithm: s.Algorithm, Ruleset: game.Ruleset, FeaturesVersion: features.Version, Number: s.Generation + 1, Ranked: ranked, Scores: append([]Score{}, s.Results...), Metric: metric}
+	if s.Source != nil {
+		gen.SourceBotID = s.Source.Policy.ID
+	}
 	s.Generation++
 	s.History = append(append([]Metric{}, s.History...), metric)
 	s.Results = []Score{}
@@ -413,8 +433,11 @@ func Advance(s State) (State, Generation, error) {
 	return s, gen, nil
 }
 func Validate(s State) error {
-	if s.Version != 1 || s.Algorithm != Algorithm || s.RandomContract != RandomContract || s.Ruleset != game.Ruleset || s.FeaturesVersion != features.Version {
+	if s.Version != 1 || s.Ruleset != game.Ruleset || s.FeaturesVersion != features.Version {
 		return fmt.Errorf("incompatible training checkpoint")
+	}
+	if err := validateSource(s); err != nil {
+		return err
 	}
 	if err := s.Config.Validate(); err != nil {
 		return err
@@ -454,7 +477,7 @@ func Validate(s State) error {
 	}
 	for i, r := range s.Results {
 		t := task(s, i)
-		if r.Index != i || r.Seed != t.Seed || r.Side != t.Side || r.OpponentID != s.Development[t.Opponent].ID {
+		if r.Index != i || r.Seed != t.Seed || r.Side != t.Side || r.OpponentID != SelectionOpponent(s, t.Opponent).ID {
 			return fmt.Errorf("corrupt checkpoint schedule")
 		}
 		if err := ValidScore(r, s.Config.MaxTurns); err != nil {

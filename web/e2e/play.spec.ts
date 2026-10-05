@@ -1219,3 +1219,121 @@ test("research records every seed, plots measured budgets and preserves final co
   );
   expect(errors).toEqual([]);
 });
+
+test("start GA-linear from a saved bot, preserve its weights, and publish a descendant", async ({
+  page,
+}, info) => {
+  const response = await page.request.post("/api/bots", {
+    data: {
+      command_id: "browser-source-fixture",
+      expected_version: 0,
+      source_bot_id: "builtin/heuristic-v1",
+      name: "Browser source",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const source: Bot = await response.json();
+  const original = await (
+    await page.request.get(`/api/bots/${source.id}`)
+  ).json();
+  const originalModel = await readFile(
+    `${dataDir}/bots/${source.id}/model.json`,
+    "utf8",
+  );
+  const sourceWeights: number[] = JSON.parse(originalModel).weights;
+  await page.goto("/#/training");
+  await page
+    .getByRole("button", { name: "Use smoke preset", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Start from saved bot", exact: true })
+    .selectOption(source.id);
+  await expect(
+    page.getByText(
+      /48 games planned against Heuristic, Random and the frozen source bot/,
+    ),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Run name", exact: true })
+    .fill("Browser source refinement");
+  await page.screenshot({
+    path: info.outputPath("saved-source-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBeTruthy();
+  await page.screenshot({
+    path: info.outputPath("saved-source-mobile.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page
+    .getByRole("button", { name: "Start training", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/training\//);
+  const id = page.url().split("/training/")[1];
+  const job = async (): Promise<Job> =>
+    (await page.request.get(`/api/training/runs/${id}`)).json();
+  await expect.poll(async () => (await job()).state).toBe("completed");
+  const trained = await job();
+  expect(trained.source_bot_id).toBe(source.id);
+  expect(trained.source_model_sha256).toBe(original.manifest.model_sha256);
+  expect(trained.algorithm).toBe("ga-linear-from-model-v1");
+  expect(trained.config?.initial_sigma).toBe(0.1);
+  expect(trained.config?.mutation_sigma).toBe(0.05);
+  expect(trained.counters.games).toBe(48);
+  const first = await (
+    await page.request.get(`/api/training/runs/${id}/generations/1`)
+  ).json();
+  expect(first.source_bot_id).toBe(source.id);
+  expect(
+    first.ranked.find((c: { id: string }) => c.id === "g0000-c0000").weights,
+  ).toEqual(sourceWeights);
+  expect(
+    new Set(first.scores.map((s: { opponent_id: string }) => s.opponent_id))
+      .size,
+  ).toBe(3);
+  const candidate = trained.candidates.find(
+    (c) => JSON.stringify(c.weights) !== JSON.stringify(sourceWeights),
+  );
+  expect(candidate).toBeTruthy();
+  await page
+    .getByRole("combobox", { name: "Candidate", exact: true })
+    .selectOption(candidate!.id);
+  await page
+    .getByRole("textbox", { name: "Bot name", exact: true })
+    .fill("Browser source descendant");
+  await page
+    .getByRole("button", { name: "Save candidate", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Evaluate this bot", exact: true }),
+  ).toBeVisible();
+  const bots: Bot[] = await (await page.request.get("/api/bots")).json();
+  const descendant = bots.find((b) => b.name === "Browser source descendant");
+  expect(descendant?.source).toContain(`trained from ${source.id}`);
+  expect(
+    await readFile(`${dataDir}/bots/${source.id}/model.json`, "utf8"),
+  ).toBe(originalModel);
+  expect(
+    await (await page.request.get(`/api/bots/${source.id}`)).json(),
+  ).toEqual(original);
+  await stop();
+  await start();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", {
+      name: "Browser source refinement",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const reopened = await job();
+  expect(reopened.source_bot_id).toBe(source.id);
+  expect(reopened.counters).toEqual(trained.counters);
+});

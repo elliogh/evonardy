@@ -273,3 +273,64 @@ has 1–500 rounds, 1–1000 games per participant per round and the same overal
 200000-game / 200000000-turn-slot caps, counting both training and selection.
 Smoke/browser scenarios validate bounded execution, persistence and playable
 snapshots, not relative strength. M6 adds systematic method comparisons.
+
+## Start GA-linear from a saved bot
+
+In **Training**, keep **GA-linear**, then choose **Start from saved bot** and
+select ev1 or another available saved linear model. This creates a new run;
+it does not extend the source run or overwrite the source model. Neural models,
+Random and virtual baselines cannot be selected as saved sources.
+
+Selecting a source initially sets spread to 0.1 and mutation scale to 0.05.
+These are editable starting settings, not a promise of improved strength.
+The smoke preset remains bounded: population 4, two generations and one pair
+per opponent produce **48 games** when a saved source is selected (32 without).
+The form displays the actual requested budget; choosing another training method
+omits the saved source.
+
+At creation the manager validates and freezes the source ID, its raw model
+SHA-256 and inference weights. Candidate zero copies those weights exactly;
+other candidates add independent Gaussian perturbations around them. Source
+weights must fit the existing [-10,10] GA genome bounds; incompatible sources
+are rejected rather than silently clipped. Stop/restart/resume and creation
+retries keep that frozen copy, even if the original package is unavailable later.
+
+Saved-source runs use `ga-linear-from-model-v1` and
+`keyed-pcg-ga-from-model-v1`. Each candidate plays both colors against Heuristic,
+Random and the frozen source, with equal opponent quotas. Selection games are
+`population × generations × pairs_per_opponent × 6`; the existing 200000-game
+and 200000000-turn-slot limits charge all three opponents. Dice roots use
+`ga/from-model/development/generation/<zero-based index>`; candidates and swapped
+sides share pair roots within a generation, while each new generation uses a
+new deterministic schedule. Independent evaluation remains in its own domain.
+Scores across generations use different dice and need not rise monotonically.
+
+Existing runs without `source_bot_id` keep `ga-linear-v1`, the two-opponent
+budget and their original fixed schedules. Old checkpoints and generation
+archives remain compatible. GA-MLP, TD and Hybrid are unchanged. Game rules,
+features, published model formats and frozen inference are unchanged.
+
+CLI, with the application stopped so its directory is exclusively owned:
+
+```bash
+bin/evonardy train --algorithm ga-linear \
+  --config configs/ga-linear-refine.json --source-bot <saved-linear-id> \
+  --name "Refine ev1 seed 1001" --save-name "ev1 candidate 1001" --data-dir ./data
+```
+
+The refinement preset uses population 64, 20 generations, four pairs per
+opponent, spread 0.1 and mutation 0.05: **30720 selection games** with a source.
+It is an explicit user training budget and is not used by ordinary smoke or CI.
+Use distinct seeds for separate runs. Record every run and choose one candidate
+using development data only. Evaluate it against the original ev1 on a fresh
+held-out paired schedule, applying the independent confirmation criterion in
+[RESEARCH.md](RESEARCH.md). Training and Evaluate do not automatically confirm
+superiority. This feature does not add saved-source methods to automated Research
+experiments or the local study runner, launch a multi-seed campaign, or
+automatically replace a champion. A saved candidate is not proof of improvement.
+
+Run snapshots expose `source_bot_id` and `source_model_sha256`. Generation
+archives record `source_bot_id`; new descendant manifests record their training
+run/generation and source ID/hash in `source`, with the usual run/candidate
+`parent_id`. Saving an identical policy keeps its existing immutable package
+and name, while the run's save receipt retains the attempted publication.

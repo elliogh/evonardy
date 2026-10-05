@@ -74,8 +74,8 @@ func (c Config) Validate() error {
 		}
 		names[method.Name] = true
 		r := method.Request
-		if r.CommandID != "" || r.ExpectedVersion != 0 || r.Name != "" {
-			return fmt.Errorf("method requests must not contain job controls")
+		if r.CommandID != "" || r.ExpectedVersion != 0 || r.Name != "" || r.SourceBotID != "" {
+			return fmt.Errorf("study method requests must not contain job controls or saved-source training")
 		}
 		var n int64
 		switch method.Name {

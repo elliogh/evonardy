@@ -38,7 +38,7 @@ Both jobs use Ubuntu 24.04, Go 1.25, and Node.js 24:
   `make bench`. Benchmarks record timings and allocations without speed or
   playing-strength thresholds; a failing benchmark command fails the job.
 - **Chromium E2E:** `make setup`, Chromium installation with system dependencies,
-  and `make e2e`. All nine browser scenarios run with one worker and no retries.
+  and `make e2e`. All ten browser scenarios run with one worker and no retries.
 
 The stable **CI result** check succeeds only when both jobs succeed. Failed,
 cancelled, or skipped dependencies fail the gate. The active `main-ci` ruleset

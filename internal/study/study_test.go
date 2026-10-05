@@ -267,6 +267,11 @@ func TestDefaultBudgetAndMethodValidation(t *testing.T) {
 			t.Fatal("unexpected job controls")
 		}
 	}
+	sourceConfig := DefaultConfig()
+	sourceConfig.Methods[0].Request.SourceBotID = strings.Repeat("a", 64)
+	if sourceConfig.Validate() == nil {
+		t.Fatal("study accepted an unsupported three-opponent source budget")
+	}
 	c.Methods[2].Request.Algorithm = jobs.Evaluation
 	if c.Validate() == nil {
 		t.Fatal("accepted algorithm mismatch")
