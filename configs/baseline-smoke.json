@@ -1,0 +1,8 @@
+{
+  "seed": 42,
+  "games": 12,
+  "workers": 2,
+  "max_turns": 1200,
+  "white": "heuristic",
+  "black": "random"
+}
