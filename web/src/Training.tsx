@@ -86,9 +86,6 @@ export function Jobs({
   return (
     <>
       <section className="hero lab-hero">
-        <p className="eyebrow">
-          {kind === "training" ? "TEACH A STRATEGY" : "TEST A FROZEN STRATEGY"}
-        </p>
         <h1>
           {kind === "training" ? "Let your bot evolve." : "Put it to the test."}
         </h1>
@@ -269,7 +266,6 @@ function TrainingForm() {
     >
       <div className="section-heading">
         <div>
-          <p className="eyebrow">NEW EXPERIMENT</p>
           <h2>{methodName}</h2>
         </div>
         <button
@@ -677,10 +673,10 @@ function JobDetail({
         <>
           <div className="game-heading">
             <div>
-              <p className="eyebrow">
+              <p className="muted">
                 {kind === "training"
-                  ? algorithmName(x).toUpperCase()
-                  : "INDEPENDENT PAIRED MATCHES"}
+                  ? algorithmName(x)
+                  : "Independent paired matches"}
               </p>
               <h1>{x.name}</h1>
             </div>
@@ -922,7 +918,6 @@ function Candidates({ x, refresh }: { x: Job; refresh: () => Promise<void> }) {
     <section className="lab-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">KEEP A STRATEGY</p>
           <h2>Evaluated candidates</h2>
         </div>
       </div>
@@ -1089,7 +1084,7 @@ function Candidates({ x, refresh }: { x: Job; refresh: () => Promise<void> }) {
       {notice && (
         <p className="notice" role="status">
           Saved as {notice.name}. Identical strategies share one snapshot.{" "}
-          <a className="button" href="#">
+          <a className="button" href="#/bots">
             Open My bots
           </a>{" "}
           <a className="button" href={`#/evaluations?bot=${notice.id}`}>

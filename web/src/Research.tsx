@@ -35,7 +35,6 @@ export function Research({ id = "" }: { id?: string }) {
   return (
     <>
       <section className="hero lab-hero">
-        <p className="eyebrow">REPRODUCIBLE RESEARCH</p>
         <h1>Compare the evidence.</h1>
         <p className="intro">
           Train multiple independent seeds, compare frozen models on paired
@@ -275,7 +274,6 @@ function ResearchDetail({ id }: { id: string }) {
       </a>
       <div className="game-heading">
         <div>
-          <p className="eyebrow">MULTI-SEED RESEARCH</p>
           <h1>{x.name}</h1>
         </div>
         <span className="tag" data-testid="research-state">
@@ -497,7 +495,7 @@ function ResearchDetail({ id }: { id: string }) {
             <a href={`#/evaluations?bot=${x.candidate_id}`}>
               Evaluate saved candidate
             </a>{" "}
-            · <a href="#">Open My bots to play</a>
+            · <a href="#/bots">Open My bots to play</a>
           </p>
         )}
         {x.final_data_reused_from.length > 0 && (
