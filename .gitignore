@@ -9,3 +9,5 @@
 /web/test-results/
 /web/playwright-report/
 *.test
+
+/.impeccable/review/

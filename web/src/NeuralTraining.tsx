@@ -85,7 +85,6 @@ export function NeuralSnapshot({
   const candidate = x.neural_candidate;
   return (
     <section className="lab-panel">
-      <p className="eyebrow">KEEP A STRATEGY</p>
       <h2>Neural snapshot</h2>
       <p className="muted">
         {candidate
@@ -140,7 +139,7 @@ export function NeuralSnapshot({
       {notice && (
         <p className="notice" role="status">
           Saved as {notice.name}. Identical strategies share one snapshot.{" "}
-          <a className="button" href="#">
+          <a className="button" href="#/bots">
             Open My bots
           </a>{" "}
           <a className="button" href={`#/evaluations?bot=${notice.id}`}>

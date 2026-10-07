@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-05T16:36:14.534183+00:00",
+  "title": "Design System: EvoNardy",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "board",
+        "value": "0 10px 10px #243c321c",
+        "purpose": "SVG board filter: drop-shadow; no card elevation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-background",
+        "value": "background 0.15s",
+        "purpose": "Button hover transition."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop",
+        "value": "1100px"
+      },
+      {
+        "name": "bot-grid-two",
+        "value": "980px"
+      },
+      {
+        "name": "stacked-play",
+        "value": "800px"
+      },
+      {
+        "name": "research-stack",
+        "value": "700px"
+      },
+      {
+        "name": "mobile",
+        "value": "600px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Implemented action style, including hover, focus and disabled states.",
+      "html": "<button class=\"ds-primary\">Start game</button>",
+      "css": ".ds-primary { font: 16px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 16px; border: 1px solid var(--line, #d6d7c9); border-radius: 8px; cursor: pointer; transition: background 0.15s; background: var(--accent, #a3442d); border-color: var(--accent, #a3442d); color: var(--surface, #fffcf5); font-weight: 700; } .ds-primary:hover { background: var(--accent-hover, #873722); } .ds-primary:focus-visible { outline: 3px solid var(--accent, #a3442d); outline-offset: 4px; } .ds-primary:disabled { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Implemented action style, including hover, focus and disabled states.",
+      "html": "<button class=\"ds-secondary\">Undo</button>",
+      "css": ".ds-secondary { font: 16px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 16px; border: 1px solid var(--line, #d6d7c9); border-radius: 8px; cursor: pointer; transition: background 0.15s; background: transparent; color: var(--ink, #243c32); } .ds-secondary:hover { background: var(--button-hover, #e5e9dc); } .ds-secondary:focus-visible { outline: 3px solid var(--accent, #a3442d); outline-offset: 4px; } .ds-secondary:disabled { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Text button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Implemented action style, including hover, focus and disabled states.",
+      "html": "<button class=\"ds-text\">Change</button>",
+      "css": ".ds-text { font: 16px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 16px; border: 1px solid var(--line, #d6d7c9); border-radius: 8px; cursor: pointer; transition: background 0.15s; background: transparent; color: var(--accent, #a3442d); min-height: 32px; padding: 2px 0; border: 0; font-size: 13px; text-decoration: underline; text-underline-offset: 4px; } .ds-text:hover { background: var(--button-hover, #e5e9dc); } .ds-text:focus-visible { outline: 3px solid var(--accent, #a3442d); outline-offset: 4px; } .ds-text:disabled { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Text field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Cream field with a clear keyboard outline.",
+      "html": "<input class=\"ds-input\" aria-label=\"Bot name\" placeholder=\"Bot name\">",
+      "css": ".ds-input { font: 16px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; background: var(--surface, #fffcf5); color: var(--ink, #243c32); border: 1px solid #8b9989; border-radius: 6px; padding: 8px 12px; min-height: 42px; caret-color: var(--accent, #a3442d); } .ds-input::placeholder { color: var(--muted, #5b685d); opacity: 1; } .ds-input:focus-visible { outline: 3px solid var(--accent, #a3442d); outline-offset: 4px; }"
+    },
+    {
+      "name": "Primary navigation",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "Compact destinations with a filled active state.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main\"><a href=\"#play\" aria-current=\"page\">Play</a><a href=\"#training\">Training</a><a href=\"#settings\">Settings</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 8px; font: 14px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; } .ds-nav a { color: var(--muted, #5b685d); padding: 10px 22px; border-radius: 6px; text-decoration: none; } .ds-nav a:hover { background: #e9ebdf; } .ds-nav a[aria-current] { background: var(--ink, #243c32); color: var(--surface, #fffcf5); } .ds-nav a:focus-visible { outline: 3px solid var(--accent, #a3442d); outline-offset: 4px; }"
+    },
+    {
+      "name": "Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Quiet metadata label.",
+      "html": "<span class=\"ds-tag\">Built-in</span>",
+      "css": ".ds-tag { font: 600 9px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; letter-spacing: 0.09em; padding: 5px 9px; border: 1px solid var(--line, #d6d7c9); border-radius: 5px; color: var(--muted, #5b685d); white-space: nowrap; }"
+    },
+    {
+      "name": "Bot card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat cream container used in Training.",
+      "html": "<article class=\"ds-card\"><h3>Heuristic</h3><p>Built-in opponent</p></article>",
+      "css": ".ds-card { font: 16px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; color: var(--ink, #243c32); background: var(--surface, #fffcf5); border: 1px solid var(--line, #d6d7c9); border-radius: 8px; padding: 24px; min-width: 0; } .ds-card h3 { font-size: 24px; font-weight: 600; letter-spacing: -0.035em; margin: 22px 0 10px; } .ds-card p { color: var(--muted, #5b685d); font-size: 13px; min-height: 40px; }"
+    },
+    {
+      "name": "Play panel",
+      "kind": "card",
+      "refersTo": "play-panel",
+      "description": "Soft sage container beside the board.",
+      "html": "<aside class=\"ds-panel\"><h2>Ready when you are.</h2><p>Your opponent</p><h3>Heuristic</h3></aside>",
+      "css": ".ds-panel { font: 16px/1.5 \"Avenir Next\", \"Segoe UI\", sans-serif; color: var(--ink, #243c32); background: #e8ecdf; border-radius: 10px; padding: 30px 24px 24px; } .ds-panel h2 { font-size: 26px; font-weight: 600; line-height: 1.25; letter-spacing: -0.035em; margin: 0 0 30px; } .ds-panel h3 { font-size: 22px; font-weight: 600; letter-spacing: -0.035em; margin: 6px 0 2px; } .ds-panel p { font-size: 13px; color: var(--muted, #5b685d); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Your place at the board",
+    "overview": "A warm, calm light shell surrounds a contrasting dark green long-nardy board. The board carries the visual weight; compact navigation, quiet dividers and a restrained terracotta action color keep the next move clear.\n\nTraining uses the same palette and typography with denser forms and real model data. The interface is desktop-first and stacks into a single column on small screens.",
+    "keyCharacteristics": [
+      "Board-led play with a compact action sidebar.",
+      "Warm paper surfaces, forest green ink and terracotta actions.",
+      "Quiet containers, readable forms and visible keyboard focus."
+    ],
+    "rules": [],
+    "dos": [
+      "Do keep the board dominant and the next game action easy to find.",
+      "Do use real saved boards, opponents and training results.",
+      "Do retain visible keyboard focus and wrapping for long identifiers.",
+      "Do preserve dense working forms in Training."
+    ],
+    "donts": [
+      "Don't add decorative eyebrows above page titles.",
+      "Don't use fabricated difficulty labels or training metrics.",
+      "Don't let the page overflow horizontally on mobile; wide research tables scroll inside their container."
+    ]
+  }
+}

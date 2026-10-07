@@ -24,11 +24,15 @@ make dev
 
 Open `http://127.0.0.1:5173`. `make dev` runs both the Go API on port 8080 and
 Vite on port 5173, proxies API requests, and stops both processes on Ctrl+C.
-Choose White or Black, select a bot, roll when prompted, and select highlighted
-checkers and destinations. If two dice permit the same destination, choose a die.
+The **Play** tab opens directly on the board. Start against Heuristic, or use
+**Change** to select another built-in or saved bot. The browser remembers your
+choice. Set your preferred White or Black color in **Settings**; it applies to
+new games. Dice roll automatically after the opponent finishes. Each opponent step highlights the source checker in yellow for one second, then the moved checker in blue for one second, while showing the die used. Select highlighted checkers and destinations. If two dice permit the same destination, choose a die.
 Undo or reset a draft, then confirm the complete turn. The server saves dice and
-drafts, so refreshing or restarting does not reroll them. Recent games resume
-from their saved state. A completed game has a downloadable, verifiable replay.
+drafts, so refreshing or restarting does not reroll them. Returning to the home screen shows the saved board and **Continue game** for
+an unfinished match. Switching tabs preserves the saved draft and dice.
+**Recent games** lists all saved matches. Completed games offer a rematch,
+a different opponent, and a downloadable, verifiable replay.
 
 For a production frontend with the local server:
 
@@ -43,7 +47,7 @@ listen addresses. Data defaults to `./data`; `EVONARDY_DATA_DIR` overrides it fo
 `make dev`. One process owns a data directory at a time, so stop the server before
 running an offline CLI command against the same directory.
 
-The library has built-in Random and Heuristic cards. Save a snapshot to keep its
+Open **Training → My bots** for the library of built-in Random and Heuristic cards. Save a snapshot to keep its
 inference package, and rename saved cards without changing their model identity.
 Identical parameters and inference contracts share one snapshot. No training or
 evaluation results are fabricated. CLI library commands are also available:
@@ -61,7 +65,7 @@ The **Training games** board automatically plays sampled actual matches from the
 run. Pause, step through turns, change playback speed, or follow newer games.
 Training continues at full speed while you watch. The latest sample survives
 restart; runs created before this feature have no recorded preview until resumed.
-**Evaluate** runs separate paired games against frozen opponents; the library
+**Training → Evaluate** runs separate paired games against frozen opponents; the library
 shows the latest completed result. Stop saves a checkpoint and Resume continues
 it after restart. You can play a saved bot while another run trains.
 

@@ -5,9 +5,16 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Bot, Snapshot } from "../src/api";
 import type { Job } from "../src/jobs";
+import { botStepDelay } from "../src/botPlayback";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const baseURL = "http://127.0.0.1:18180";
+// One roll frame and two frames per move, including all four moves of a double.
+const playbackTimeout = 9 * botStepDelay + 5_000;
+
+test.beforeEach(async ({ page }) => {
+  await page.clock.install();
+});
 let dataDir: string;
 let server: ChildProcess;
 async function start() {
@@ -181,6 +188,25 @@ test("watch real training games without pausing learning and recover the board a
 });
 
 async function snapshot(page: Page, id: string): Promise<Snapshot> {
+  if (page.url().endsWith(`#/games/${id}`)) {
+    const status = page.locator(".turn-status");
+    await expect
+      .poll(
+        async () => {
+          if ((await status.getAttribute("data-playback")) === "playing") {
+            // Advance each frame so React can render and schedule the next one.
+            await page.clock.runFor(botStepDelay);
+          }
+          return status.evaluate(
+            (element) =>
+              element.getAttribute("data-playback") === "idle" &&
+              /^(moving|finished)$/.test(element.getAttribute("data-phase") ?? ""),
+          );
+        },
+        { timeout: playbackTimeout, intervals: [50] },
+      )
+      .toBe(true);
+  }
   const response = await page.request.get(`/api/games/${id}`);
   expect(response.ok()).toBeTruthy();
   return response.json();
@@ -195,9 +221,15 @@ async function buttonCommand(page: Page, id: string, name: string) {
   const before = await snapshot(page, id);
   await page.getByRole("button", { name, exact: true }).click();
   await expect
-    .poll(async () => (await snapshot(page, id)).version)
-    .toBe(before.version + 1);
+    .poll(async () => (await snapshot(page, id)).version, {
+      timeout: playbackTimeout,
+    })
+    .toBeGreaterThan(before.version);
   const x = await snapshot(page, id);
+  const confirms = name === "Confirm turn" || name === "Pass turn";
+  expect(x.version).toBe(
+    before.version + (confirms && x.phase !== "finished" ? 2 : 1),
+  );
   await rendered(page, x);
   return x;
 }
@@ -220,7 +252,9 @@ async function firstStep(page: Page, id: string) {
       .getByRole("button", { name: `Move with ${step.die}`, exact: true })
       .click();
   await expect
-    .poll(async () => (await snapshot(page, id)).version)
+    .poll(async () => (await snapshot(page, id)).version, {
+      timeout: playbackTimeout,
+    })
     .toBe(before.version + 1);
   const x = await snapshot(page, id);
   await rendered(page, x);
@@ -232,7 +266,7 @@ test("save and rename a bot, recover a draft, and finish a real browser game", a
 }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await page.goto("/#/bots");
   await expect(
     page.getByRole("button", { name: "Play against Heuristic", exact: true }),
   ).toBeVisible();
@@ -268,8 +302,6 @@ test("save and rename a bot, recover a draft, and finish a real browser game", a
   const id = page.url().split("/games/")[1];
   let x = await snapshot(page, id);
   await rendered(page, x);
-  if (x.phase === "awaiting_roll")
-    x = await buttonCommand(page, id, "Roll dice");
   x = await firstStep(page, id);
   const saved = x;
   await page.reload();
@@ -310,8 +342,6 @@ test("save and rename a bot, recover a draft, and finish a real browser game", a
   });
   let commands = 0;
   while (x.phase !== "finished" && commands++ < 1500) {
-    if (x.phase === "awaiting_roll")
-      x = await buttonCommand(page, id, "Roll dice");
     while (!x.continuations.complete) x = await firstStep(page, id);
     x = await buttonCommand(
       page,
@@ -326,11 +356,22 @@ test("save and rename a bot, recover a draft, and finish a real browser game", a
   const response = await page.request.get(`/api/replays/${id}`);
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).status).toBe("completed");
-  await page.getByRole("link", { name: "← My bots", exact: true }).click();
+  await page.goto("/#/bots");
   await expect(
     page.getByRole("heading", { name: "Opening study", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".recent-game")).toContainText("wins");
+  await page.goto("/");
+  await page.locator(".recent-section summary").click();
+  await expect(
+    page.locator(`.recent-game[href="#/games/${id}"]`),
+  ).toContainText("wins");
+  await page.goto(`/#/games/${id}`);
+  await page.getByRole("button", { name: "Rematch", exact: true }).click();
+  await expect(page).not.toHaveURL(new RegExp(`${id}$`));
+  const rematch = await snapshot(page, page.url().split("/games/")[1]);
+  expect(rematch.bot_id).toBe(x.bot_id);
+  expect(rematch.human).toBe(x.human);
+  expect(rematch.id).not.toBe(id);
   expect(errors).toEqual([]);
 });
 
@@ -348,12 +389,14 @@ test("a saved model plays as Black and another browser receives draft updates", 
   });
   expect(response.ok()).toBeTruthy();
   const bot: Bot = await response.json();
-  await page.goto("/");
+  await page.goto("/#/bots");
   const saved = page.locator(".bot-card").filter({
     has: page.getByRole("heading", { name: bot.name, exact: true }),
   });
   await expect(saved).toBeVisible();
+  await page.goto("/#/settings");
   await page.getByRole("combobox", { name: "Your color" }).selectOption("1");
+  await page.goto("/#/bots");
   await saved
     .getByRole("button", { name: `Play against ${bot.name}`, exact: true })
     .click();
@@ -362,9 +405,8 @@ test("a saved model plays as Black and another browser receives draft updates", 
   let x = await snapshot(page, id);
   await rendered(page, x);
   expect(x.human).toBe(1);
-  if (x.phase === "awaiting_roll")
-    x = await buttonCommand(page, id, "Roll dice");
   const observer = await context.newPage();
+  await observer.clock.install();
   await observer.goto(`/#/games/${id}`);
   await rendered(observer, x);
   x = await firstStep(page, id);
@@ -507,7 +549,8 @@ test("train, publish, independently evaluate, resume after restart, and play a f
     .poll(async () => (await job(other)).counters.games)
     .toBeGreaterThan(0);
   const player = await context.newPage();
-  await player.goto("/");
+  await player.clock.install();
+  await player.goto("/#/bots");
   await player
     .getByRole("button", { name: `Play against ${bot.name}`, exact: true })
     .click();
@@ -542,8 +585,6 @@ test("train, publish, independently evaluate, resume after restart, and play a f
   let x = game;
   let commands = 0;
   while (x.phase !== "finished" && commands++ < 1500) {
-    if (x.phase === "awaiting_roll")
-      x = await buttonCommand(player, gameID, "Roll dice");
     while (!x.continuations.complete) x = await firstStep(player, gameID);
     x = await buttonCommand(
       player,
@@ -563,7 +604,7 @@ test("train, publish, independently evaluate, resume after restart, and play a f
     manifest,
   );
   await player.close();
-  await page.goto("/");
+  await page.goto("/#/bots");
   const card = page.locator(".bot-card").filter({
     has: page.getByRole("heading", { name: bot.name, exact: true }),
   });
@@ -775,8 +816,9 @@ for (const method of ["td0", "td-lambda"] as const) {
     await expect(viewer).toHaveAttribute("data-frame", frame!);
     await expect(viewer).toHaveAttribute("data-game-key", key!);
     const player = await context.newPage();
+    await player.clock.install();
     player.on("pageerror", (e) => errors.push(e.message));
-    await player.goto("/");
+    await player.goto("/#/bots");
     await player
       .getByRole("button", { name: `Play against ${bot.name}`, exact: true })
       .click();
@@ -815,8 +857,6 @@ for (const method of ["td0", "td-lambda"] as const) {
     let x = game;
     let commands = 0;
     while (x.phase !== "finished" && commands++ < 1500) {
-      if (x.phase === "awaiting_roll")
-        x = await buttonCommand(player, gameID, "Roll dice");
       while (!x.continuations.complete) x = await firstStep(player, gameID);
       x = await buttonCommand(
         player,
@@ -1014,8 +1054,9 @@ for (const method of ["ga-mlp", "hybrid"] as const) {
       .toBeGreaterThan(before.counters.games);
     await expect(viewer).toHaveAttribute("data-frame", frame!);
     const player = await context.newPage();
+    await player.clock.install();
     player.on("pageerror", (e) => errors.push(e.message));
-    await player.goto("/");
+    await player.goto("/#/bots");
     await player
       .getByRole("button", { name: `Play against ${bot.name}`, exact: true })
       .click();
@@ -1049,8 +1090,6 @@ for (const method of ["ga-mlp", "hybrid"] as const) {
       "stopped",
     );
     let game = await snapshot(player, gameID);
-    if (game.phase === "awaiting_roll")
-      game = await buttonCommand(player, gameID, "Roll dice");
     while (!game.continuations.complete) game = await firstStep(player, gameID);
     game = await buttonCommand(
       player,
@@ -1218,4 +1257,135 @@ test("research records every seed, plots measured budgets and preserves final co
     "previously reserved",
   );
   expect(errors).toEqual([]);
+});
+
+test("play first: remember opponent and color, keep drafts across tabs and resume from home", async ({
+  page,
+}) => {
+  await page.goto("/#/play/new");
+  await expect(
+    page.getByRole("heading", { name: "Heuristic", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Change", exact: true }).click();
+  await page
+    .getByLabel("Choose opponent", { exact: true })
+    .selectOption("builtin/random-v1");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Random", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Settings" })
+    .click();
+  await page.getByLabel("Your color", { exact: true }).selectOption("1");
+  await page.getByRole("link", { name: "Play", exact: true }).click();
+  await expect(page.getByText("You play Black", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  await expect(page).toHaveURL(/#\/games\//);
+  const id = page.url().split("/games/")[1];
+  let game = await snapshot(page, id);
+  expect(game.bot_id).toBe("builtin/random-v1");
+  expect(game.human).toBe(1);
+  await rendered(page, game);
+  game = await firstStep(page, id);
+  await page.getByRole("link", { name: "Training", exact: true }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Training navigation" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Play", exact: true }).click();
+  await rendered(page, game);
+  expect(await snapshot(page, id)).toEqual(game);
+  await page.goto("/");
+  await expect(
+    page.getByRole("link", { name: "Continue game", exact: true }),
+  ).toHaveAttribute("href", `#/games/${id}`);
+  for (let point = 0; point < 24; point++) {
+    const position = game.draft_position;
+    const count = position.checkers[0][point] + position.checkers[1][point];
+    const player = position.checkers[0][point] > 0 ? "White" : "Black";
+    await expect(page.locator(`[data-point="${point}"]`)).toHaveAttribute(
+      "aria-label",
+      `Point ${point + 1}, ${count ? `${count} ${player} checkers` : "empty"}`,
+    );
+  }
+  await page.getByRole("link", { name: "Continue game", exact: true }).click();
+  await rendered(page, game);
+  expect(await snapshot(page, id)).toEqual(game);
+});
+
+test("default play works without history or evaluations and falls back from an unavailable bot", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("evonardy.bot", "deleted-model"),
+  );
+  await page.route("**/api/games", async (route) => {
+    if (route.request().method() === "GET")
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "history unavailable" } }),
+      });
+    else await route.continue();
+  });
+  await page.route("**/api/evaluations", (route) => route.abort());
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Heuristic", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Your previous opponent is unavailable.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "Could not load saved games",
+  );
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  await expect(page).toHaveURL(/#\/games\//);
+  const game = await snapshot(page, page.url().split("/games/")[1]);
+  expect(game.bot_id).toBe("builtin/heuristic-v1");
+  expect(game.human).toBe(0);
+});
+
+test("blocked browser storage does not prevent playing", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new Error("storage disabled");
+      },
+    });
+  });
+  await page.goto("/#/play/new");
+  await page.getByRole("button", { name: "Change", exact: true }).click();
+  await page
+    .getByLabel("Choose opponent", { exact: true })
+    .selectOption("builtin/random-v1");
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  await expect(page).toHaveURL(/#\/games\//);
+  const game = await snapshot(page, page.url().split("/games/")[1]);
+  expect(game.bot_id).toBe("builtin/random-v1");
+});
+
+test("failed preference writes keep the current session color instead of an old stored value", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("evonardy.color", "0");
+    Storage.prototype.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+  });
+  await page.goto("/#/settings");
+  await page.getByLabel("Your color", { exact: true }).selectOption("1");
+  await page.getByRole("link", { name: "Play", exact: true }).click();
+  // Other scenarios may have left a saved game in the shared server archive.
+  const newGame = page.getByRole("link", { name: "New game", exact: true });
+  const start = page.getByRole("button", { name: "Start game", exact: true });
+  await expect(newGame.or(start)).toBeVisible();
+  if (await newGame.isVisible()) await newGame.click();
+  await expect(page.getByText("You play Black", { exact: true })).toBeVisible();
+  await start.click();
+  await expect(page).toHaveURL(/#\/games\//);
+  const game = await snapshot(page, page.url().split("/games/")[1]);
+  expect(game.human).toBe(1);
 });
