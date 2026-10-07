@@ -125,6 +125,20 @@ export function Game({ id }: { id: string }) {
     else if (x.continuations.next.some((step) => step.from === point)) {
       setSelected(point);
       setChoices([]);
+    } else {
+      setSelected(null);
+      setChoices([]);
+    }
+  }
+  function bearOff(point: number) {
+    if (!x || playing || busy || x.phase !== "moving") return;
+    const matches = x.continuations.next.filter(
+      (step) => step.from === point && step.to === 24,
+    );
+    if (matches.length === 1) move(matches[0]);
+    else if (matches.length > 1) {
+      setSelected(point);
+      setChoices(matches);
     }
   }
   return (
@@ -208,6 +222,7 @@ export function Game({ id }: { id: string }) {
                 }
                 disabled={busy || playing || x.phase !== "moving"}
                 onPoint={point}
+                onBearOff={bearOff}
               />
               {!playing && choices.length > 0 && (
                 <fieldset className="die-choice">

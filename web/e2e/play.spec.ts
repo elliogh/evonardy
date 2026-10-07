@@ -188,6 +188,13 @@ test("watch real training games without pausing learning and recover the board a
 });
 
 async function snapshot(page: Page, id: string): Promise<Snapshot> {
+  let current: Snapshot;
+  const read = async () => {
+    const response = await page.request.get(`/api/games/${id}`);
+    expect(response.ok()).toBeTruthy();
+    current = await response.json();
+    return current;
+  };
   if (page.url().endsWith(`#/games/${id}`)) {
     const status = page.locator(".turn-status");
     await expect
@@ -197,19 +204,21 @@ async function snapshot(page: Page, id: string): Promise<Snapshot> {
             // Advance each frame so React can render and schedule the next one.
             await page.clock.runFor(botStepDelay);
           }
+          const latest = await read();
           return status.evaluate(
-            (element) =>
+            (element, version) =>
+              element.getAttribute("data-version") === String(version) &&
               element.getAttribute("data-playback") === "idle" &&
               /^(moving|finished)$/.test(element.getAttribute("data-phase") ?? ""),
+            latest.version,
           );
         },
         { timeout: playbackTimeout, intervals: [50] },
       )
       .toBe(true);
+    return current!;
   }
-  const response = await page.request.get(`/api/games/${id}`);
-  expect(response.ok()).toBeTruthy();
-  return response.json();
+  return read();
 }
 async function rendered(page: Page, x: Snapshot) {
   await expect(page.locator(".turn-status")).toHaveAttribute(

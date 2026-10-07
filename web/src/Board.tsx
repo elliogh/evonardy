@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { Position, Step } from "./api";
 import { color } from "./api";
 
@@ -14,6 +14,7 @@ type Props = {
   selected: number | null;
   disabled: boolean;
   onPoint: (point: number) => void;
+  onBearOff?: (point: number) => void;
   highlight?: Step;
   highlightStage?: "source" | "destination";
 };
@@ -23,10 +24,17 @@ export function Board({
   selected,
   disabled,
   onPoint,
+  onBearOff,
   highlight,
   highlightStage = "destination",
 }: Props) {
   const routeID = useId();
+  const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClick = () => {
+    if (pendingClick.current !== null) clearTimeout(pendingClick.current);
+    pendingClick.current = null;
+  };
+  useEffect(() => cancelClick, [position, disabled]);
   const leftQuarter = fieldX + halfWidth / 2;
   const rightQuarter = fieldX + halfWidth + dividerWidth + halfWidth / 2;
   const whiteRoute = "M850 28H50";
@@ -164,6 +172,7 @@ export function Board({
           const player = position.checkers[0][point] > 0 ? 0 : 1;
           const active =
             !disabled && (destinations.has(point) || sources.has(point));
+          const clickable = !disabled && (active || count > 0);
           const label = `Point ${point + 1}, ${count ? `${count} ${color(player)} checkers` : "empty"}${active ? (destinations.has(point) ? ", move here" : ", select checker") : ""}`;
           return (
             <g
@@ -171,12 +180,32 @@ export function Board({
               data-point={point}
               role="button"
               aria-label={label}
-              aria-disabled={!active}
-              tabIndex={active ? 0 : -1}
+              aria-disabled={!clickable}
+              tabIndex={clickable ? 0 : -1}
               className={`point ${point % 2 ? "light" : "dark"} ${active ? "active" : ""} ${selected === point ? "selected" : ""} ${destinations.has(point) ? "destination" : ""}`}
-              onClick={() => active && onPoint(point)}
+              onClick={(event) => {
+                if (!clickable || event.detail >= 2) return;
+                cancelClick();
+                if (
+                  onBearOff &&
+                  next.some((step) => step.from === point && step.to === 24) &&
+                  (event.target as Element).closest(".checker, .stack-count")
+                ) {
+                  pendingClick.current = setTimeout(() => {
+                    pendingClick.current = null;
+                    onPoint(point);
+                  }, 400);
+                } else onPoint(point);
+              }}
+              onDoubleClick={(event) => {
+                cancelClick();
+                if (
+                  clickable &&
+                  (event.target as Element).closest(".checker, .stack-count")
+                ) onBearOff?.(point);
+              }}
               onKeyDown={(event) => {
-                if (active && (event.key === "Enter" || event.key === " ")) {
+                if (clickable && (event.key === "Enter" || event.key === " ")) {
                   event.preventDefault();
                   onPoint(point);
                 }
